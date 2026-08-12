@@ -28,6 +28,13 @@ export interface ObjectStoragePort {
   }): Promise<void>;
   abortMultipartUpload(key: string, uploadId: string): Promise<void>;
   createDownloadUrl(key: string, expiresInSeconds: number): Promise<string>;
+  downloadToFile(key: string, destinationPath: string): Promise<void>;
+  uploadFile(input: {
+    key: string;
+    sourcePath: string;
+    contentType: string;
+    checksumSha256: string;
+  }): Promise<void>;
   head(key: string): Promise<StoredObjectMetadata | null>;
   delete(key: string): Promise<void>;
 }

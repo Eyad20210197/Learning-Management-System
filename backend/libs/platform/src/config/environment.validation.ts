@@ -31,6 +31,8 @@ export interface EnvironmentVariables extends Record<string, unknown> {
   OBJECT_STORAGE_FORCE_PATH_STYLE: boolean;
   OBJECT_STORAGE_UPLOAD_TTL_SECONDS: number;
   MAX_VIDEO_UPLOAD_BYTES: number;
+  FFMPEG_PATH?: string;
+  FFPROBE_PATH?: string;
 }
 
 const commaSeparatedOrigins = (
@@ -156,6 +158,8 @@ export const environmentSchema = Joi.object<EnvironmentVariables>({
     .min(1_048_576)
     .max(5_497_558_138_880)
     .default(10_737_418_240),
+  FFMPEG_PATH: Joi.string().allow('').optional(),
+  FFPROBE_PATH: Joi.string().allow('').optional(),
 })
   .custom(requireProductionEmail, 'production SMTP validation')
   .messages({

@@ -1382,7 +1382,7 @@ components:
     Video:
       type: object
       additionalProperties: false
-      required: [id, lessonId, status, sourceFilename, sourceSizeBytes, isCurrent, createdAt, updatedAt]
+      required: [id, lessonId, status, sourceFilename, sourceSizeBytes, isCurrent, processingError, createdAt, updatedAt]
       properties:
         id: { $ref: "#/components/schemas/Uuid" }
         lessonId: { $ref: "#/components/schemas/Uuid" }
@@ -1394,5 +1394,40 @@ components:
         height: { type: [integer, "null"], minimum: 1 }
         isCurrent: { type: boolean }
         processingError: { type: [string, "null"] }
+        variants:
+          type: array
+          items: { $ref: "#/components/schemas/VideoVariant" }
+        processingJobs:
+          type: array
+          items: { $ref: "#/components/schemas/VideoProcessingJob" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    VideoVariant:
+      type: object
+      additionalProperties: false
+      required: [id, status, width, height, bitrateKbps, videoCodec, audioCodec, sizeBytes]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        status: { type: string, enum: [PENDING, PROCESSING, READY, FAILED] }
+        width: { type: integer, minimum: 1 }
+        height: { type: integer, minimum: 1 }
+        bitrateKbps: { type: integer, minimum: 1 }
+        videoCodec: { type: string }
+        audioCodec: { type: string }
+        sizeBytes: { type: [integer, "null"], minimum: 1 }
+    VideoProcessingJob:
+      type: object
+      additionalProperties: false
+      required: [id, videoId, queueJobId, status, attempt, startedAt, finishedAt, errorCode, errorMessage, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        videoId: { $ref: "#/components/schemas/Uuid" }
+        queueJobId: { type: [string, "null"] }
+        status: { type: string, enum: [QUEUED, ACTIVE, SUCCEEDED, FAILED, CANCELLED] }
+        attempt: { type: integer, minimum: 0 }
+        startedAt: { oneOf: [{ $ref: "#/components/schemas/Timestamp" }, { type: "null" }] }
+        finishedAt: { oneOf: [{ $ref: "#/components/schemas/Timestamp" }, { type: "null" }] }
+        errorCode: { type: [string, "null"] }
+        errorMessage: { type: [string, "null"] }
         createdAt: { $ref: "#/components/schemas/Timestamp" }
         updatedAt: { $ref: "#/components/schemas/Timestamp" }

@@ -8,11 +8,13 @@ import {
   HeadObjectCommand,
   GetObjectCommand,
   PutObjectCommand,
-  PutBucketCorsCommand,
   S3Client,
   UploadPartCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { pipeline } from 'node:stream/promises';
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type {
@@ -26,7 +28,6 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort, OnModuleInit {
   private readonly bucket: string;
   private readonly createBucketLocally: boolean;
   private readonly skipInitialization: boolean;
-  private readonly corsOrigins: string[];
 
   constructor(config: ConfigService) {
     const endpoint = config.getOrThrow<string>('storage.endpoint');
@@ -34,11 +35,12 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort, OnModuleInit {
     this.createBucketLocally = new URL(endpoint).hostname === '127.0.0.1';
     this.skipInitialization =
       config.getOrThrow<string>('app.nodeEnv') === 'test';
-    this.corsOrigins = config.getOrThrow<string[]>('app.corsOrigins');
     this.client = new S3Client({
       endpoint,
       region: config.getOrThrow<string>('storage.region'),
       forcePathStyle: config.getOrThrow<boolean>('storage.forcePathStyle'),
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
       credentials: {
         accessKeyId: config.getOrThrow<string>('storage.accessKeyId'),
         secretAccessKey: config.getOrThrow<string>('storage.secretAccessKey'),
@@ -54,22 +56,6 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort, OnModuleInit {
       if (!this.createBucketLocally) throw error;
       await this.client.send(new CreateBucketCommand({ Bucket: this.bucket }));
     }
-    await this.client.send(
-      new PutBucketCorsCommand({
-        Bucket: this.bucket,
-        CORSConfiguration: {
-          CORSRules: [
-            {
-              AllowedOrigins: this.corsOrigins,
-              AllowedMethods: ['GET', 'PUT', 'HEAD'],
-              AllowedHeaders: ['content-type', 'content-length'],
-              ExposeHeaders: ['ETag'],
-              MaxAgeSeconds: 3600,
-            },
-          ],
-        },
-      }),
-    );
   }
 
   createUploadUrl(input: {
@@ -163,6 +149,38 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort, OnModuleInit {
     );
   }
 
+  async downloadToFile(key: string, destinationPath: string): Promise<void> {
+    const result = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+    if (result.Body === undefined) {
+      throw new Error('Object storage returned an empty response body');
+    }
+    await pipeline(
+      result.Body as NodeJS.ReadableStream,
+      createWriteStream(destinationPath),
+    );
+  }
+
+  async uploadFile(input: {
+    key: string;
+    sourcePath: string;
+    contentType: string;
+    checksumSha256: string;
+  }): Promise<void> {
+    const size = (await stat(input.sourcePath)).size;
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: input.key,
+        Body: createReadStream(input.sourcePath),
+        ContentLength: size,
+        ContentType: input.contentType,
+        Metadata: { sha256: input.checksumSha256 },
+      }),
+    );
+  }
+
   async head(key: string): Promise<StoredObjectMetadata | null> {
     try {
       const result = await this.client.send(
@@ -171,7 +189,7 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort, OnModuleInit {
       return {
         sizeBytes: result.ContentLength ?? 0,
         contentType: result.ContentType,
-        checksumSha256: result.ChecksumSHA256,
+        checksumSha256: result.ChecksumSHA256 ?? result.Metadata?.sha256,
       };
     } catch (error: unknown) {
       if (

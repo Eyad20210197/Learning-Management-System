@@ -22,8 +22,10 @@ import {
   CompleteMultipartUploadUseCase,
   CompleteVideoUploadUseCase,
   CreateMultipartPartUrlUseCase,
-  GetVideoUseCase,
+  GetVideoDetailsUseCase,
   InitiateVideoUploadUseCase,
+  RetryVideoProcessingUseCase,
+  ActivateVideoUseCase,
 } from '../../application';
 import {
   CompleteMultipartUploadDto,
@@ -43,7 +45,9 @@ export class OwnerVideoController {
     private readonly completeUpload: CompleteVideoUploadUseCase,
     private readonly createPartUrl: CreateMultipartPartUrlUseCase,
     private readonly completeMultipart: CompleteMultipartUploadUseCase,
-    private readonly getVideo: GetVideoUseCase,
+    private readonly getVideo: GetVideoDetailsUseCase,
+    private readonly retryVideo: RetryVideoProcessingUseCase,
+    private readonly activateVideo: ActivateVideoUseCase,
     private readonly idempotency: IdempotencyService,
     private readonly audit: AuditService,
   ) {}
@@ -147,7 +151,61 @@ export class OwnerVideoController {
   @Get('videos/:videoId')
   @RequirePermissions('video.read')
   async get(@Param('videoId', ParseUUIDPipe) videoId: string) {
-    return VideoPresenter.video(await this.getVideo.execute(videoId));
+    return VideoPresenter.details(await this.getVideo.execute(videoId));
+  }
+
+  @Post('videos/:videoId/retry')
+  @HttpCode(202)
+  @RequirePermissions('video.retry')
+  async retry(
+    @Req() request: OwnerRequest,
+    @Headers('idempotency-key') key: string | undefined,
+    @Param('videoId', ParseUUIDPipe) videoId: string,
+  ) {
+    return (
+      await this.idempotency.execute({
+        actorUserId: request.auth.user.id,
+        scope: `video-processing.retry:${videoId}`,
+        key,
+        request: { videoId },
+        responseStatus: 202,
+        handler: async () => {
+          const video = await this.retryVideo.execute(videoId);
+          await this.record(
+            request,
+            'video.processing.retry',
+            'video',
+            videoId,
+          );
+          return VideoPresenter.video(video);
+        },
+      })
+    ).value;
+  }
+
+  @Post('lessons/:lessonId/videos/:videoId/activate')
+  @HttpCode(200)
+  @RequirePermissions('video.activate')
+  async activate(
+    @Req() request: OwnerRequest,
+    @Headers('idempotency-key') key: string | undefined,
+    @Param('lessonId', ParseUUIDPipe) lessonId: string,
+    @Param('videoId', ParseUUIDPipe) videoId: string,
+  ) {
+    return (
+      await this.idempotency.execute({
+        actorUserId: request.auth.user.id,
+        scope: `video.activate:${lessonId}`,
+        key,
+        request: { lessonId, videoId },
+        responseStatus: 200,
+        handler: async () => {
+          const video = await this.activateVideo.execute(lessonId, videoId);
+          await this.record(request, 'video.activate', 'video', videoId);
+          return VideoPresenter.video(video);
+        },
+      })
+    ).value;
   }
 
   private record(

@@ -1,4 +1,12 @@
-import type { VideoUploadView, VideoView } from '../../domain';
+import type {
+  VideoDetailsView,
+  VideoProbe,
+  VideoProcessingJobView,
+  VideoSourceView,
+  VideoUploadView,
+  VideoVariantView,
+  VideoView,
+} from '../../domain';
 
 export interface CreateUploadInput {
   lessonId: string;
@@ -16,8 +24,36 @@ export interface MediaRepositoryPort {
   completeUpload(
     id: string,
     metadata: { mimeType: string; sizeBytes: number; checksumSha256?: string },
-  ): Promise<VideoView | null>;
+  ): Promise<{ video: VideoView; processingJobId: string } | null>;
   getVideo(id: string): Promise<VideoView | null>;
+  getVideoDetails(id: string): Promise<VideoDetailsView | null>;
+  getQueueableProcessingJob(
+    videoId: string,
+  ): Promise<VideoProcessingJobView | null>;
+  claimProcessing(input: {
+    processingJobId: string;
+    queueJobId: string;
+    attempt: number;
+  }): Promise<VideoSourceView | null>;
+  markProcessingSucceeded(input: {
+    processingJobId: string;
+    probe: VideoProbe;
+    masterAsset: ProcessedAssetRecord;
+    thumbnailAsset: ProcessedAssetRecord;
+    variants: ProcessedVariantRecord[];
+  }): Promise<VideoView | null>;
+  markProcessingFailed(input: {
+    processingJobId: string;
+    attempt: number;
+    errorCode: string;
+    errorMessage: string;
+    terminal: boolean;
+  }): Promise<void>;
+  retryProcessing(videoId: string): Promise<{
+    video: VideoView;
+    processingJob: VideoProcessingJobView;
+  } | null>;
+  activateVideo(lessonId: string, videoId: string): Promise<VideoView | null>;
   expireUploads(now: Date): Promise<VideoUploadView[]>;
   createLessonResource(input: {
     lessonId: string;
@@ -37,6 +73,18 @@ export interface MediaRepositoryPort {
     now: Date,
   ): Promise<LessonResourceUploadView | null>;
   expireLessonResources(now: Date): Promise<LessonResourceUploadView[]>;
+}
+
+export interface ProcessedAssetRecord {
+  storageKey: string;
+  mimeType: string;
+  sizeBytes: number;
+  checksumSha256: string;
+}
+
+export interface ProcessedVariantRecord extends VideoVariantView {
+  playlistKey: string;
+  sizeBytes: string;
 }
 
 export interface LessonResourceUploadView {

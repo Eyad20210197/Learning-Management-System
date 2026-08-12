@@ -14,6 +14,13 @@ describe('video upload use cases', () => {
     findUpload: jest.fn(),
     completeUpload: jest.fn(),
     getVideo: jest.fn(),
+    getVideoDetails: jest.fn(),
+    getQueueableProcessingJob: jest.fn(),
+    claimProcessing: jest.fn(),
+    markProcessingSucceeded: jest.fn(),
+    markProcessingFailed: jest.fn(),
+    retryProcessing: jest.fn(),
+    activateVideo: jest.fn(),
     expireUploads: jest.fn(),
     createLessonResource: jest.fn(),
     findLessonResource: jest.fn(),
@@ -28,6 +35,8 @@ describe('video upload use cases', () => {
     completeMultipartUpload: jest.fn(),
     abortMultipartUpload: jest.fn(),
     createDownloadUrl: jest.fn(),
+    downloadToFile: jest.fn(),
+    uploadFile: jest.fn(),
     head: jest.fn(),
     delete: jest.fn(),
   } as jest.Mocked<ObjectStoragePort>;
@@ -71,18 +80,21 @@ describe('video upload use cases', () => {
       checksumSha256: 'checksum',
     });
     repository.completeUpload.mockResolvedValue({
-      id: 'video',
-      lessonId: 'lesson',
-      status: 'QUEUED',
-      sourceFilename: 'video.mp4',
-      sourceSizeBytes: '128',
-      durationSeconds: null,
-      width: null,
-      height: null,
-      isCurrent: false,
-      processingError: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      processingJobId: 'processing-job',
+      video: {
+        id: 'video',
+        lessonId: 'lesson',
+        status: 'QUEUED',
+        sourceFilename: 'video.mp4',
+        sourceSizeBytes: '128',
+        durationSeconds: null,
+        width: null,
+        height: null,
+        isCurrent: false,
+        processingError: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
     });
 
     const useCase = new CompleteVideoUploadUseCase(repository, storage, queue);
@@ -92,8 +104,8 @@ describe('video upload use cases', () => {
     });
     expect(queue.add.mock.calls).toContainEqual([
       'transcode-video',
-      { videoId: 'video' },
-      { jobId: 'video-video' },
+      { videoId: 'video', processingJobId: 'processing-job' },
+      { jobId: 'processing-processing-job' },
     ]);
   });
 

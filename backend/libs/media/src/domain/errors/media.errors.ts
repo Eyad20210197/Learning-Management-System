@@ -20,3 +20,20 @@ export class UploadStateConflictError extends DomainError {
     super('UPLOAD_STATE_CONFLICT', message);
   }
 }
+
+export class VideoProcessingConflictError extends DomainError {
+  constructor(
+    message = 'The video cannot be processed from its current state.',
+  ) {
+    super('VIDEO_PROCESSING_CONFLICT', message);
+  }
+}
+
+export class InvalidVideoSourceError extends Error {
+  readonly code = 'INVALID_VIDEO_SOURCE';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidVideoSourceError';
+  }
+}

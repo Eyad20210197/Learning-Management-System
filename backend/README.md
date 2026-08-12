@@ -1,6 +1,6 @@
 # LMS backend
 
-Production-oriented Phase 0 foundation for the single-owner LMS. The backend is a strict-TypeScript NestJS modular monolith with separate HTTP API and background-worker processes.
+Production-oriented backend through Phase 4 for the single-owner LMS. It is a strict-TypeScript NestJS modular monolith with separate HTTP API and BullMQ video-worker processes.
 
 The current language and phase decision is recorded in [ADR-0001](../Documentation/Architecture/ADR-0001-typescript-phase-zero-foundation.md). It amends, but does not silently rewrite, the original [V1 implementation plan](../Documentation/LMS_V1_JavaScript_Implementation_Plan.md).
 
@@ -50,7 +50,7 @@ npm --version
 docker compose version
 ```
 
-FFmpeg, Cloudflare Wrangler, and R2 credentials are not required in Phase 0.
+FFmpeg and FFprobe platform binaries are installed through npm for local development. `FFMPEG_PATH` and `FFPROBE_PATH` may override them in production. Cloudflare Wrangler and R2 credentials are not required for the local MinIO workflow.
 
 ## Local setup
 
@@ -119,15 +119,16 @@ The Swagger document is a development view of implemented endpoints. It does not
 
 Startup validation fails fast when required configuration is missing or invalid.
 
-| Group           | Variables                                                                                                                                                      |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Application     | `NODE_ENV`, `API_PORT`, `APP_URL`, `CORS_ORIGINS`, `LOG_LEVEL`, `API_DOCS_ENABLED`                                                                             |
-| Authentication  | `JWT_ACCESS_SECRET`, `JWT_ACCESS_TTL_SECONDS`, `REFRESH_TOKEN_SECRET`, `REFRESH_TOKEN_TTL_SECONDS`, `MAX_REGISTERED_DEVICES`, `PASSWORD_RESET_TTL_SECONDS`     |
-| Email           | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` (required in production)                                                    |
-| PostgreSQL      | `DATABASE_URL`, `DATABASE_POOL_MAX`                                                                                                                            |
-| Redis and queue | `REDIS_URL`, `VIDEO_QUEUE_PREFIX`                                                                                                                              |
-| Object storage  | `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_REGION`, `OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`, `OBJECT_STORAGE_BUCKET`, upload limits |
-| Local Compose   | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT`, `REDIS_PORT`                                                                             |
+| Group            | Variables                                                                                                                                                      |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Application      | `NODE_ENV`, `API_PORT`, `APP_URL`, `CORS_ORIGINS`, `LOG_LEVEL`, `API_DOCS_ENABLED`                                                                             |
+| Authentication   | `JWT_ACCESS_SECRET`, `JWT_ACCESS_TTL_SECONDS`, `REFRESH_TOKEN_SECRET`, `REFRESH_TOKEN_TTL_SECONDS`, `MAX_REGISTERED_DEVICES`, `PASSWORD_RESET_TTL_SECONDS`     |
+| Email            | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` (required in production)                                                    |
+| PostgreSQL       | `DATABASE_URL`, `DATABASE_POOL_MAX`                                                                                                                            |
+| Redis and queue  | `REDIS_URL`, `VIDEO_QUEUE_PREFIX`                                                                                                                              |
+| Object storage   | `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_REGION`, `OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`, `OBJECT_STORAGE_BUCKET`, upload limits |
+| Video processing | `FFMPEG_PATH`, `FFPROBE_PATH` (optional locally; required when deployment-managed binaries are preferred)                                                      |
+| Local Compose    | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT`, `REDIS_PORT`                                                                             |
 
 `CORS_ORIGINS` accepts comma-separated HTTP(S) origins without paths. Disable API documentation in production unless it is deliberately protected and required.
 
@@ -190,15 +191,16 @@ Run `npm run start:prod:worker` in a second service/process with the same valida
 
 ## Current implementation boundaries
 
-The foundation, canonical contracts, identity schema, registration, login, rotating sessions, device revocation, and RBAC guard are implemented. It intentionally does not yet implement:
+Backend Phases 0 through 4 are implemented: platform infrastructure, identity/RBAC, learning and progress, private direct/multipart uploads and resources, plus asynchronous FFprobe/FFmpeg H.264/AAC adaptive-HLS processing. The worker selects only non-upscaled 360p/480p/720p/1080p renditions, generates a master playlist and thumbnail, verifies uploaded assets, persists attempts and variants, cleans temporary workspaces, exposes owner status/retry operations, and activates ready lesson videos atomically.
 
-- the owner operations UI;
-- courses, lessons, enrollments, progress, or other LMS business schema;
-- R2 storage, uploads, FFmpeg/FFprobe processing, or functional queue jobs;
-- playback leases, HLS delivery, the Cloudflare media gateway, or the frontend;
-- production deployment, backups, monitoring, or load/security suites.
+The following remain intentionally pending:
 
-The context modules and video queue are deliberate extension points, not claims that those product capabilities already exist.
+- playback leases, HLS media delivery, Redis concurrent-stream enforcement, and the Cloudflare media gateway;
+- remaining owner operational/audit APIs, backups, monitoring, and cleanup operations;
+- complete security, load, restore, and release-readiness gates;
+- all frontend work.
+
+Local MinIO receives its browser CORS policy through `MINIO_API_CORS_ALLOW_ORIGIN`. Configure the equivalent private-bucket CORS policy explicitly when provisioning Cloudflare R2.
 
 ## Troubleshooting
 

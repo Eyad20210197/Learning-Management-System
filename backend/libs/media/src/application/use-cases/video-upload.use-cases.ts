@@ -171,7 +171,12 @@ export class CompleteVideoUploadUseCase {
     if (upload.status === 'COMPLETED') {
       const video = await this.repository.getVideo(upload.videoId);
       if (video === null) throw new MediaResourceNotFoundError();
-      await this.enqueue(video.id);
+      const processingJob = await this.repository.getQueueableProcessingJob(
+        video.id,
+      );
+      if (processingJob !== null) {
+        await this.enqueue(video.id, processingJob.id);
+      }
       return video;
     }
     if (upload.status !== 'PENDING' && upload.status !== 'UPLOADING') {
@@ -198,21 +203,24 @@ export class CompleteVideoUploadUseCase {
         'The uploaded object content type is invalid.',
       );
     }
-    const video = await this.repository.completeUpload(uploadId, {
+    const completed = await this.repository.completeUpload(uploadId, {
       mimeType: object.contentType,
       sizeBytes: object.sizeBytes,
       checksumSha256: object.checksumSha256,
     });
-    if (video === null) throw new UploadStateConflictError();
-    await this.enqueue(video.id);
-    return video;
+    if (completed === null) throw new UploadStateConflictError();
+    await this.enqueue(completed.video.id, completed.processingJobId);
+    return completed.video;
   }
 
-  private async enqueue(videoId: string): Promise<void> {
+  private async enqueue(
+    videoId: string,
+    processingJobId: string,
+  ): Promise<void> {
     await this.queue.add(
       'transcode-video',
-      { videoId },
-      { jobId: `video-${videoId}` },
+      { videoId, processingJobId },
+      { jobId: `processing-${processingJobId}` },
     );
   }
 }
