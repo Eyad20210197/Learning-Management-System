@@ -24,4 +24,4 @@ Implementing that instruction without recording it would leave the repository wi
 - Strict compilation, linting, formatting, tests, Prisma generation, and both application builds become required quality gates.
 - TypeScript remains a build-time tool; deployed applications still execute compiled JavaScript.
 - The frontend and Cloudflare media gateway are not created by this foundation phase even though their future source language is now TypeScript.
-- Before product feature work advances, the authoritative implementation plan should be updated or superseded so its language and phase labels agree with this accepted decision.
+- The authoritative implementation plan was reconciled to this decision before product feature work began; its legacy filename remains only to preserve links.

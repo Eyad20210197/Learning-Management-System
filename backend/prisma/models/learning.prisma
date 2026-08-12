@@ -1,1 +1,145 @@
-// Learning-owned models are introduced with the reviewed LMS core schema.
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+
+  @@map("course_status")
+}
+
+enum LessonType {
+  VIDEO
+  TEXT
+
+  @@map("lesson_type")
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+  EXPIRED
+
+  @@map("enrollment_status")
+}
+
+enum LessonResourceStatus {
+  PENDING
+  READY
+  EXPIRED
+
+  @@map("lesson_resource_status")
+}
+
+model Course {
+  id           String          @id @default(uuid(7)) @db.Uuid
+  title        String
+  slug         String          @unique
+  description  String
+  thumbnailKey String?         @map("thumbnail_key")
+  status       CourseStatus    @default(DRAFT)
+  publishedAt  DateTime?       @map("published_at") @db.Timestamptz(6)
+  archivedAt   DateTime?       @map("archived_at") @db.Timestamptz(6)
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  sections     CourseSection[]
+  enrollments  Enrollment[]
+
+  @@index([status, publishedAt])
+  @@map("courses")
+}
+
+model CourseSection {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  courseId    String   @map("course_id") @db.Uuid
+  title       String
+  description String?
+  sortOrder   Int      @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  lessons     Lesson[]
+
+  @@unique([courseId, sortOrder])
+  @@map("course_sections")
+}
+
+model Lesson {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  sectionId   String           @map("section_id") @db.Uuid
+  title       String
+  description String?
+  type        LessonType
+  textContent String?          @map("text_content")
+  sortOrder   Int              @map("sort_order")
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  section     CourseSection    @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  progress    LessonProgress[]
+  resources   LessonResource[]
+  videos      Video[]
+
+  @@unique([sectionId, sortOrder])
+  @@map("lessons")
+}
+
+model LessonResource {
+  id                String               @id @default(uuid(7)) @db.Uuid
+  lessonId          String               @map("lesson_id") @db.Uuid
+  initiatedByUserId String               @map("initiated_by_user_id") @db.Uuid
+  title             String
+  filename          String
+  status            LessonResourceStatus @default(PENDING)
+  storageKey        String               @unique @map("storage_key")
+  mimeType          String               @map("mime_type")
+  sizeBytes         BigInt               @map("size_bytes")
+  expiresAt         DateTime?            @map("expires_at") @db.Timestamptz(6)
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  lesson            Lesson               @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+  initiatedBy       User                 @relation(fields: [initiatedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([lessonId, createdAt])
+  @@index([status, expiresAt])
+  @@map("lesson_resources")
+}
+
+model Enrollment {
+  id              String           @id @default(uuid(7)) @db.Uuid
+  userId          String           @map("user_id") @db.Uuid
+  courseId        String           @map("course_id") @db.Uuid
+  status          EnrollmentStatus @default(ACTIVE)
+  startsAt        DateTime         @map("starts_at") @db.Timestamptz(6)
+  expiresAt       DateTime?        @map("expires_at") @db.Timestamptz(6)
+  completedAt     DateTime?        @map("completed_at") @db.Timestamptz(6)
+  grantedByUserId String           @map("granted_by_user_id") @db.Uuid
+  revokedAt       DateTime?        @map("revoked_at") @db.Timestamptz(6)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user            User             @relation("StudentEnrollments", fields: [userId], references: [id], onDelete: Restrict)
+  course          Course           @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  grantedBy       User             @relation("GrantedEnrollments", fields: [grantedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, courseId])
+  @@index([courseId, status, createdAt])
+  @@index([userId, status, expiresAt])
+  @@index([grantedByUserId])
+  @@map("enrollments")
+}
+
+model LessonProgress {
+  id                     String    @id @default(uuid(7)) @db.Uuid
+  userId                 String    @map("user_id") @db.Uuid
+  lessonId               String    @map("lesson_id") @db.Uuid
+  lastPositionSeconds    Int       @default(0) @map("last_position_seconds")
+  maximumPositionSeconds Int       @default(0) @map("maximum_position_seconds")
+  watchedSeconds         Int       @default(0) @map("watched_seconds")
+  percentage             Decimal   @default(0) @db.Decimal(5, 2)
+  completedAt            DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  lesson                 Lesson    @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, lessonId])
+  @@index([lessonId])
+  @@map("lesson_progress")
+}

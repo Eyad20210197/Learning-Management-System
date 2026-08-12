@@ -1,1 +1,62 @@
-// Operations-owned models are introduced with the reviewed audit schema.
+enum SecuritySeverity {
+  INFO
+  WARNING
+  HIGH
+  CRITICAL
+
+  @@map("security_severity")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  action      String
+  targetType  String   @map("target_type")
+  targetId    String?  @map("target_id") @db.Uuid
+  requestId   String?  @map("request_id") @db.Uuid
+  metadata    Json?
+  ipAddress   String?  @map("ip_address") @db.Inet
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  actor       User?    @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([actorUserId, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+model SecurityEvent {
+  id         String           @id @default(uuid(7)) @db.Uuid
+  userId     String?          @map("user_id") @db.Uuid
+  deviceId   String?          @map("device_id") @db.Uuid
+  type       String
+  severity   SecuritySeverity
+  metadata   Json?
+  resolvedAt DateTime?        @map("resolved_at") @db.Timestamptz(6)
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  user       User?            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  device     Device?          @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@index([deviceId, createdAt])
+  @@index([severity, resolvedAt, createdAt])
+  @@map("security_events")
+}
+
+model IdempotencyKey {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  actorUserId    String   @map("actor_user_id") @db.Uuid
+  scope          String
+  key            String
+  requestHash    String   @map("request_hash")
+  responseStatus Int?     @map("response_status")
+  responseBody   Json?    @map("response_body")
+  expiresAt      DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  actor          User     @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([actorUserId, scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}

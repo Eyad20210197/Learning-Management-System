@@ -1,2 +1,9 @@
-/** HTTP-facing identity controllers, DTOs, and presenters. */
-export {};
+export * from './auth/access-token.guard';
+export * from './auth/permission.guard';
+export * from './auth/refresh-origin.guard';
+export * from './controllers/account.controller';
+export * from './controllers/auth.controller';
+export * from './dto/login.dto';
+export * from './dto/password.dto';
+export * from './dto/register-student.dto';
+export * from './presenters/device.presenter';

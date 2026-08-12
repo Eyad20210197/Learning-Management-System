@@ -1,0 +1,482 @@
+Project lms_v1 {
+  database_type: "PostgreSQL"
+  Note: "Canonical v1 logical schema. UUIDs are application-generated UUIDv7 values. All timestamps map to timestamptz."
+}
+
+Enum user_status {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+Enum course_status {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+Enum lesson_type {
+  VIDEO
+  TEXT
+}
+Enum enrollment_status {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+  EXPIRED
+}
+Enum video_status {
+  UPLOADING
+  UPLOADED
+  QUEUED
+  PROCESSING
+  READY
+  FAILED
+  DELETING
+  DELETED
+}
+Enum video_asset_type {
+  SOURCE
+  HLS_MASTER
+  THUMBNAIL
+  CAPTION
+}
+Enum video_variant_status {
+  PROCESSING
+  READY
+  FAILED
+}
+Enum upload_status {
+  PENDING
+  UPLOADING
+  COMPLETED
+  ABORTED
+  EXPIRED
+  FAILED
+}
+Enum processing_job_status {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+Enum playback_status {
+  ACTIVE
+  ENDED
+  EXPIRED
+  REVOKED
+  REPLACED
+}
+Enum one_time_token_type {
+  PASSWORD_RESET
+  EMAIL_VERIFICATION
+}
+Enum security_severity {
+  INFO
+  WARNING
+  HIGH
+  CRITICAL
+}
+
+Table users {
+  id uuid [pk]
+  email text [not null, unique, note: "Persist normalized lowercase email"]
+  password_hash text [not null]
+  first_name text [not null]
+  last_name text [not null]
+  status user_status [not null, default: 'PENDING_VERIFICATION']
+  email_verified_at timestamptz
+  last_login_at timestamptz
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes { (status, created_at) }
+}
+
+Table roles {
+  id uuid [pk]
+  name text [not null, unique, note: "Seed OWNER and STUDENT only"]
+  description text
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table permissions {
+  id uuid [pk]
+  key text [not null, unique]
+  description text
+  created_at timestamptz [not null]
+}
+
+Table user_roles {
+  user_id uuid [not null, ref: > users.id]
+  role_id uuid [not null, ref: > roles.id]
+  created_at timestamptz [not null]
+
+  indexes {
+    (user_id, role_id) [pk]
+    (role_id)
+  }
+}
+
+Table role_permissions {
+  role_id uuid [not null, ref: > roles.id]
+  permission_id uuid [not null, ref: > permissions.id]
+  created_at timestamptz [not null]
+
+  indexes {
+    (role_id, permission_id) [pk]
+    (permission_id)
+  }
+}
+
+Table devices {
+  id uuid [pk]
+  user_id uuid [not null, ref: > users.id]
+  client_device_uuid uuid [not null]
+  name text [not null]
+  browser text
+  operating_system text
+  user_agent text
+  first_seen_at timestamptz [not null]
+  last_seen_at timestamptz [not null]
+  revoked_at timestamptz
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (user_id, client_device_uuid) [unique]
+    (user_id, revoked_at)
+  }
+}
+
+Table auth_sessions {
+  id uuid [pk]
+  user_id uuid [not null, ref: > users.id]
+  device_id uuid [not null, ref: > devices.id]
+  ip_address inet
+  user_agent text
+  last_seen_at timestamptz [not null]
+  revoked_at timestamptz
+  revoke_reason text
+  created_at timestamptz [not null]
+
+  indexes {
+    (user_id, revoked_at)
+    (device_id, revoked_at)
+  }
+}
+
+Table refresh_tokens {
+  id uuid [pk]
+  session_id uuid [not null, ref: > auth_sessions.id]
+  token_hash text [not null, unique]
+  parent_token_id uuid [ref: > refresh_tokens.id]
+  expires_at timestamptz [not null]
+  used_at timestamptz
+  revoked_at timestamptz
+  created_at timestamptz [not null]
+
+  indexes {
+    (session_id, expires_at)
+    (expires_at)
+  }
+}
+
+Table one_time_tokens {
+  id uuid [pk]
+  user_id uuid [not null, ref: > users.id]
+  type one_time_token_type [not null]
+  token_hash text [not null, unique]
+  expires_at timestamptz [not null]
+  consumed_at timestamptz
+  created_at timestamptz [not null]
+
+  indexes {
+    (user_id, type, created_at)
+    (expires_at)
+  }
+}
+
+Table courses {
+  id uuid [pk]
+  title text [not null]
+  slug text [not null, unique]
+  description text [not null]
+  thumbnail_key text
+  status course_status [not null, default: 'DRAFT']
+  published_at timestamptz
+  archived_at timestamptz
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes { (status, published_at) }
+}
+
+Table course_sections {
+  id uuid [pk]
+  course_id uuid [not null, ref: > courses.id]
+  title text [not null]
+  description text
+  sort_order int [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes { (course_id, sort_order) [unique] }
+}
+
+Table lessons {
+  id uuid [pk]
+  section_id uuid [not null, ref: > course_sections.id]
+  title text [not null]
+  description text
+  type lesson_type [not null]
+  text_content text
+  sort_order int [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes { (section_id, sort_order) [unique] }
+}
+
+Table lesson_resources {
+  id uuid [pk]
+  lesson_id uuid [not null, ref: > lessons.id]
+  title text [not null]
+  storage_key text [not null, unique]
+  mime_type text [not null]
+  size_bytes bigint [not null]
+  created_at timestamptz [not null]
+
+  indexes { (lesson_id, created_at) }
+}
+
+Table enrollments {
+  id uuid [pk]
+  user_id uuid [not null, ref: > users.id]
+  course_id uuid [not null, ref: > courses.id]
+  status enrollment_status [not null]
+  starts_at timestamptz [not null]
+  expires_at timestamptz
+  completed_at timestamptz
+  granted_by_user_id uuid [not null, ref: > users.id]
+  revoked_at timestamptz
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (user_id, course_id) [unique]
+    (course_id, status, created_at)
+    (user_id, status, expires_at)
+    (granted_by_user_id)
+  }
+}
+
+Table lesson_progress {
+  id uuid [pk]
+  user_id uuid [not null, ref: > users.id]
+  lesson_id uuid [not null, ref: > lessons.id]
+  last_position_seconds int [not null, default: 0]
+  maximum_position_seconds int [not null, default: 0]
+  watched_seconds int [not null, default: 0]
+  percentage numeric(5,2) [not null, default: 0]
+  completed_at timestamptz
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (user_id, lesson_id) [unique]
+    (lesson_id)
+  }
+}
+
+Table videos {
+  id uuid [pk]
+  lesson_id uuid [not null, ref: > lessons.id]
+  status video_status [not null]
+  source_filename text [not null]
+  source_size_bytes bigint [not null]
+  duration_seconds int
+  width int
+  height int
+  video_codec text
+  audio_codec text
+  is_current boolean [not null, default: false]
+  processing_error text
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (lesson_id, status, created_at)
+    (status, created_at)
+  }
+}
+
+Table video_assets {
+  id uuid [pk]
+  video_id uuid [not null, ref: > videos.id]
+  type video_asset_type [not null]
+  storage_key text [not null, unique]
+  mime_type text [not null]
+  size_bytes bigint [not null]
+  checksum_sha256 text
+  created_at timestamptz [not null]
+
+  indexes { (video_id, type) }
+}
+
+Table video_variants {
+  id uuid [pk]
+  video_id uuid [not null, ref: > videos.id]
+  status video_variant_status [not null]
+  width int [not null]
+  height int [not null]
+  bitrate_kbps int [not null]
+  video_codec text [not null]
+  audio_codec text [not null]
+  playlist_key text [not null, unique]
+  size_bytes bigint
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes { (video_id, height) [unique] }
+}
+
+Table video_uploads {
+  id uuid [pk]
+  video_id uuid [not null, ref: > videos.id]
+  initiated_by_user_id uuid [not null, ref: > users.id]
+  status upload_status [not null]
+  storage_key text [not null, unique]
+  provider_upload_id text
+  expected_size_bytes bigint [not null]
+  completed_at timestamptz
+  expires_at timestamptz [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (video_id, status)
+    (initiated_by_user_id, created_at)
+    (status, expires_at)
+  }
+}
+
+Table video_processing_jobs {
+  id uuid [pk]
+  video_id uuid [not null, ref: > videos.id]
+  queue_job_id text [unique]
+  status processing_job_status [not null]
+  attempt int [not null, default: 0]
+  started_at timestamptz
+  finished_at timestamptz
+  error_code text
+  error_message text
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (video_id, created_at)
+    (status, created_at)
+  }
+}
+
+Table playback_sessions {
+  id uuid [pk]
+  user_id uuid [not null, ref: > users.id]
+  lesson_id uuid [not null, ref: > lessons.id]
+  video_id uuid [not null, ref: > videos.id]
+  device_id uuid [not null, ref: > devices.id]
+  status playback_status [not null]
+  session_code text [not null, unique]
+  started_at timestamptz [not null]
+  last_heartbeat_at timestamptz [not null]
+  ended_at timestamptz
+  last_position_seconds int [not null, default: 0]
+  ip_address inet
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (user_id, status, last_heartbeat_at)
+    (device_id, status)
+    (video_id, created_at)
+    (lesson_id)
+  }
+}
+
+Table playback_events {
+  id uuid [pk]
+  playback_session_id uuid [not null, ref: > playback_sessions.id]
+  event_type text [not null]
+  position_seconds int
+  metadata jsonb
+  created_at timestamptz [not null]
+
+  indexes {
+    (playback_session_id, created_at)
+    (event_type, created_at)
+  }
+}
+
+Table audit_logs {
+  id uuid [pk]
+  actor_user_id uuid [ref: > users.id]
+  action text [not null]
+  target_type text [not null]
+  target_id uuid
+  request_id uuid
+  metadata jsonb
+  ip_address inet
+  user_agent text
+  created_at timestamptz [not null]
+
+  indexes {
+    (actor_user_id, created_at)
+    (target_type, target_id, created_at)
+    (action, created_at)
+  }
+}
+
+Table security_events {
+  id uuid [pk]
+  user_id uuid [ref: > users.id]
+  device_id uuid [ref: > devices.id]
+  type text [not null]
+  severity security_severity [not null]
+  metadata jsonb
+  resolved_at timestamptz
+  created_at timestamptz [not null]
+
+  indexes {
+    (user_id, created_at)
+    (device_id, created_at)
+    (severity, resolved_at, created_at)
+  }
+}
+
+Table idempotency_keys {
+  id uuid [pk]
+  actor_user_id uuid [not null, ref: > users.id]
+  scope text [not null]
+  key text [not null]
+  request_hash text [not null]
+  response_status int
+  response_body jsonb
+  expires_at timestamptz [not null]
+  created_at timestamptz [not null]
+
+  indexes {
+    (actor_user_id, scope, key) [unique]
+    (expires_at)
+  }
+}
+
+Note schema_checks {
+  '''
+  Physical migrations must add checks for non-negative sizes/positions/attempts,
+  percentage between 0 and 100, positive dimensions/bitrates, expires_at after
+  starts_at, one current READY video per lesson (partial unique index), and one
+  active playback per user (enforced atomically with Redis plus PostgreSQL state).
+  Every foreign key used outside a composite leading column receives an index.
+  '''
+}

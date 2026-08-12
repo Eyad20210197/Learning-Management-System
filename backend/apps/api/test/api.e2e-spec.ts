@@ -1,8 +1,21 @@
 import type { Server } from 'node:http';
-import type { INestApplication } from '@nestjs/common';
+import {
+  Controller,
+  type CanActivate,
+  Get,
+  type INestApplication,
+  type ExecutionContext,
+  UseGuards,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { getQueueToken } from '@nestjs/bullmq';
 import { Test, type TestingModule } from '@nestjs/testing';
+import {
+  PermissionGuard,
+  RegisterStudentUseCase,
+  RequirePermissions,
+} from '@lms/identity';
+import { OBJECT_STORAGE } from '@lms/media';
 import {
   PrismaService,
   RedisService,
@@ -27,13 +40,56 @@ interface ErrorResponseBody {
   requestId: string;
 }
 
+interface UserResponseBody {
+  id: string;
+  email: string;
+  roles: string[];
+}
+
+class StudentAccessGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest<{
+      auth?: { permissions: string[] };
+    }>();
+    request.auth = { permissions: [] };
+    return true;
+  }
+}
+
+@Controller({ path: 'owner/test-authorization', version: '1' })
+@UseGuards(StudentAccessGuard, PermissionGuard)
+@RequirePermissions('course.write')
+class OwnerAuthorizationProbeController {
+  @Get()
+  probe(): { ok: true } {
+    return { ok: true };
+  }
+}
+
 describe('API foundation (e2e)', () => {
   let app: INestApplication;
   let httpServer: Server;
+  const registerStudent = jest
+    .fn()
+    .mockImplementation(
+      (input: { email: string; firstName: string; lastName: string }) =>
+        Promise.resolve({
+          id: '0198d03a-81df-7c0f-9908-e700c1c6744d',
+          email: { value: input.email },
+          firstName: input.firstName,
+          lastName: input.lastName,
+          status: 'ACTIVE',
+          roles: ['STUDENT'],
+          createdAt: new Date('2026-08-12T00:00:00.000Z'),
+          updatedAt: new Date('2026-08-12T00:00:00.000Z'),
+        }),
+    );
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [ApiModule],
+      controllers: [OwnerAuthorizationProbeController],
+      providers: [StudentAccessGuard, PermissionGuard],
     })
       .overrideProvider(PrismaService)
       .useValue({ ping: jest.fn().mockResolvedValue(undefined) })
@@ -41,6 +97,19 @@ describe('API foundation (e2e)', () => {
       .useValue({ ping: jest.fn().mockResolvedValue(undefined) })
       .overrideProvider(getQueueToken(VIDEO_PROCESSING_QUEUE))
       .useValue({ close: jest.fn().mockResolvedValue(undefined) })
+      .overrideProvider(OBJECT_STORAGE)
+      .useValue({
+        createUploadUrl: jest.fn(),
+        createMultipartUpload: jest.fn(),
+        createMultipartPartUrl: jest.fn(),
+        completeMultipartUpload: jest.fn(),
+        abortMultipartUpload: jest.fn(),
+        createDownloadUrl: jest.fn(),
+        head: jest.fn(),
+        delete: jest.fn(),
+      })
+      .overrideProvider(RegisterStudentUseCase)
+      .useValue({ execute: registerStudent })
       .compile();
 
     app = moduleFixture.createNestApplication({ logger: false });
@@ -87,5 +156,62 @@ describe('API foundation (e2e)', () => {
     });
     expect(body.requestId).toMatch(/^[0-9a-f-]{36}$/i);
     expect(responseRequestId).toBe(body.requestId);
+  });
+
+  it('registers a student through the versioned HTTP contract', async () => {
+    const response = await request(httpServer)
+      .post('/api/v1/auth/register')
+      .send({
+        email: 'student@example.com',
+        password: 'correct horse battery staple',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+      })
+      .expect(201);
+    const body = response.body as unknown as UserResponseBody;
+
+    expect(body).toMatchObject({
+      id: '0198d03a-81df-7c0f-9908-e700c1c6744d',
+      email: 'student@example.com',
+      roles: ['STUDENT'],
+    });
+    expect(registerStudent).toHaveBeenCalledWith({
+      email: 'student@example.com',
+      password: 'correct horse battery staple',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+    });
+  });
+
+  it('rejects unknown registration fields before the use case runs', async () => {
+    registerStudent.mockClear();
+
+    const response = await request(httpServer)
+      .post('/api/v1/auth/register')
+      .send({
+        email: 'student@example.com',
+        password: 'correct horse battery staple',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        isOwner: true,
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      code: 'VALIDATION_FAILED',
+    });
+    expect(registerStudent).not.toHaveBeenCalled();
+  });
+
+  it('denies a student principal access to owner permissions', async () => {
+    const response = await request(httpServer)
+      .get('/api/v1/owner/test-authorization')
+      .expect(403);
+
+    expect(response.body).toMatchObject({
+      statusCode: 403,
+      code: 'PERMISSION_DENIED',
+    });
   });
 });

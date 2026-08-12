@@ -1,1 +1,150 @@
-// Media-owned models are introduced with the reviewed processing schema.
+enum VideoStatus {
+  UPLOADING
+  UPLOADED
+  QUEUED
+  PROCESSING
+  READY
+  FAILED
+  DELETING
+  DELETED
+
+  @@map("video_status")
+}
+
+enum UploadStatus {
+  PENDING
+  UPLOADING
+  COMPLETED
+  EXPIRED
+  ABORTED
+
+  @@map("upload_status")
+}
+
+enum VideoAssetType {
+  SOURCE
+  HLS_MASTER
+  THUMBNAIL
+  CAPTION
+
+  @@map("video_asset_type")
+}
+
+enum VideoVariantStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+
+  @@map("video_variant_status")
+}
+
+enum ProcessingJobStatus {
+  QUEUED
+  ACTIVE
+  SUCCEEDED
+  FAILED
+  CANCELLED
+
+  @@map("processing_job_status")
+}
+
+model Video {
+  id                String               @id @default(uuid(7)) @db.Uuid
+  lessonId          String               @map("lesson_id") @db.Uuid
+  status            VideoStatus          @default(UPLOADING)
+  sourceFilename    String               @map("source_filename")
+  sourceSizeBytes   BigInt               @map("source_size_bytes")
+  durationSeconds   Int?                 @map("duration_seconds")
+  width             Int?
+  height            Int?
+  videoCodec        String?              @map("video_codec")
+  audioCodec        String?              @map("audio_codec")
+  isCurrent         Boolean              @default(false) @map("is_current")
+  processingError   String?              @map("processing_error")
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  lesson            Lesson               @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+  assets            VideoAsset[]
+  variants          VideoVariant[]
+  uploads           VideoUpload[]
+  processingJobs    VideoProcessingJob[]
+
+  @@index([lessonId, status, createdAt])
+  @@index([status, createdAt])
+  @@map("videos")
+}
+
+model VideoAsset {
+  id             String         @id @default(uuid(7)) @db.Uuid
+  videoId        String         @map("video_id") @db.Uuid
+  type           VideoAssetType
+  storageKey     String         @unique @map("storage_key")
+  mimeType       String         @map("mime_type")
+  sizeBytes      BigInt         @map("size_bytes")
+  checksumSha256 String?        @map("checksum_sha256")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  video          Video          @relation(fields: [videoId], references: [id], onDelete: Restrict)
+
+  @@index([videoId, type])
+  @@map("video_assets")
+}
+
+model VideoVariant {
+  id          String             @id @default(uuid(7)) @db.Uuid
+  videoId     String             @map("video_id") @db.Uuid
+  status      VideoVariantStatus @default(PENDING)
+  width       Int
+  height      Int
+  bitrateKbps Int                @map("bitrate_kbps")
+  videoCodec  String             @map("video_codec")
+  audioCodec  String             @map("audio_codec")
+  playlistKey String             @unique @map("playlist_key")
+  sizeBytes   BigInt?            @map("size_bytes")
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  video       Video              @relation(fields: [videoId], references: [id], onDelete: Restrict)
+
+  @@unique([videoId, height])
+  @@map("video_variants")
+}
+
+model VideoUpload {
+  id                String       @id @default(uuid(7)) @db.Uuid
+  videoId           String       @map("video_id") @db.Uuid
+  initiatedByUserId String       @map("initiated_by_user_id") @db.Uuid
+  status            UploadStatus @default(PENDING)
+  storageKey        String       @unique @map("storage_key")
+  providerUploadId  String?      @map("provider_upload_id")
+  expectedSizeBytes BigInt       @map("expected_size_bytes")
+  completedAt       DateTime?    @map("completed_at") @db.Timestamptz(6)
+  expiresAt         DateTime     @map("expires_at") @db.Timestamptz(6)
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  video             Video        @relation(fields: [videoId], references: [id], onDelete: Restrict)
+  initiatedBy       User         @relation(fields: [initiatedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([videoId, status])
+  @@index([initiatedByUserId, createdAt])
+  @@index([status, expiresAt])
+  @@map("video_uploads")
+}
+
+model VideoProcessingJob {
+  id           String              @id @default(uuid(7)) @db.Uuid
+  videoId      String              @map("video_id") @db.Uuid
+  queueJobId   String?             @unique @map("queue_job_id")
+  status       ProcessingJobStatus @default(QUEUED)
+  attempt      Int                 @default(0)
+  startedAt    DateTime?           @map("started_at") @db.Timestamptz(6)
+  finishedAt   DateTime?           @map("finished_at") @db.Timestamptz(6)
+  errorCode    String?             @map("error_code")
+  errorMessage String?             @map("error_message")
+  createdAt    DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  video        Video               @relation(fields: [videoId], references: [id], onDelete: Restrict)
+
+  @@index([videoId, createdAt])
+  @@index([status, createdAt])
+  @@map("video_processing_jobs")
+}

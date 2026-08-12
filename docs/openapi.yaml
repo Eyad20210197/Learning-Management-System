@@ -1,0 +1,1398 @@
+openapi: 3.1.0
+info:
+  title: LMS V1 API
+  version: 1.0.0
+  description: Canonical single-owner LMS contract. NestJS is the authorization authority.
+  license:
+    name: UNLICENSED
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local development
+tags:
+  - name: Health
+    description: Public dependency readiness
+  - name: Auth
+    description: Authentication and credential lifecycle
+  - name: Account
+    description: Current-subject profile, devices, and sessions
+  - name: Catalogue
+    description: Published public course metadata
+  - name: Learning
+    description: Authorized student curriculum and progress
+  - name: Playback
+    description: Authorized short-lived playback sessions
+  - name: Owner courses
+    description: Owner-only curriculum management
+  - name: Owner enrollments
+    description: Owner-only access grants
+  - name: Owner videos
+    description: Owner-only upload and processing operations
+  - name: Owner users
+    description: Least-data student lookup for owner operations
+security: []
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Check API dependencies
+      responses:
+        "200":
+          description: Dependencies are healthy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthResponse" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      operationId: registerStudent
+      summary: Register a student account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "201":
+          description: Student registered
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Authenticate and register/resolve a device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Authenticated; rotating refresh cookie is set
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+              description: HttpOnly refresh cookie scoped to the refresh endpoint
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthResponse" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshSession
+      summary: Rotate refresh token and issue an access token
+      security: [{ refreshCookie: [] }]
+      responses:
+        "200":
+          description: Token rotated
+          headers:
+            Set-Cookie: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Revoke the current session
+      security: [{ bearerAuth: [] }, { refreshCookie: [] }]
+      responses:
+        "204": { description: Logged out }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/logout-all:
+    post:
+      tags: [Auth]
+      operationId: logoutAll
+      summary: Revoke all subject sessions and playback
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: All sessions revoked }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/password/forgot:
+    post:
+      tags: [Auth]
+      operationId: forgotPassword
+      summary: Request password reset without account enumeration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties: { email: { type: string, format: email } }
+      responses:
+        "202": { description: Request accepted whether or not the account exists }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /auth/password/reset:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: Consume a one-time reset token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token: { type: string, minLength: 32 }
+                newPassword: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        "204": { description: Password changed and sessions revoked }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /auth/password/change:
+    post:
+      tags: [Auth]
+      operationId: changePassword
+      summary: Change the current subject password
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        "204": { description: Password changed; other sessions revoked }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /me:
+    get:
+      tags: [Account]
+      operationId: getMe
+      summary: Get the current subject profile
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      tags: [Account]
+      operationId: updateMe
+      summary: Update the current subject profile
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                firstName: { type: string, minLength: 1, maxLength: 100 }
+                lastName: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /me/devices:
+    get:
+      tags: [Account]
+      operationId: listMyDevices
+      summary: List the current subject devices
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Subject devices
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Device" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /me/devices/{deviceId}:
+    delete:
+      tags: [Account]
+      operationId: revokeMyDevice
+      summary: Revoke one current-subject device
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "204": { description: Device and its sessions revoked }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /catalog/courses:
+    get:
+      tags: [Catalogue]
+      operationId: listPublishedCourses
+      summary: List published courses
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Published courses
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoursePage" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+
+  /catalog/courses/{slug}:
+    get:
+      tags: [Catalogue]
+      operationId: getPublishedCourse
+      summary: Get published course metadata by slug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+      responses:
+        "200":
+          description: Public course metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Course" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /me/courses:
+    get:
+      tags: [Learning]
+      operationId: listMyCourses
+      summary: List courses available to the current student
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Courses covered by subject enrollments
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoursePage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /me/courses/{courseId}:
+    get:
+      tags: [Learning]
+      operationId: getMyCourse
+      summary: Get an authorized course curriculum
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CourseId"
+      responses:
+        "200":
+          description: Authorized curriculum
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CourseWithCurriculum" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /me/lessons/{lessonId}:
+    get:
+      tags: [Learning]
+      operationId: getMyLesson
+      summary: Get an authorized lesson
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/LessonId"
+      responses:
+        "200":
+          description: Authorized lesson without storage credentials or keys
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Lesson" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /me/lessons/{lessonId}/progress:
+    put:
+      tags: [Learning]
+      operationId: updateMyLessonProgress
+      summary: Save current-subject lesson progress
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/LessonId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgressRequest" }
+      responses:
+        "200":
+          description: Saved progress
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LessonProgress" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /me/lessons/{lessonId}/playback-sessions:
+    post:
+      tags: [Playback]
+      operationId: createPlaybackSession
+      summary: Create or replace the current playback session
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/LessonId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Playback created; narrow media lease cookie is set
+          headers:
+            Set-Cookie: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaybackSession" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /me/playback-sessions/{sessionId}/heartbeat:
+    post:
+      tags: [Playback]
+      operationId: heartbeatPlaybackSession
+      summary: Renew playback activity and media lease
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [positionSeconds]
+              properties:
+                positionSeconds: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: Heartbeat accepted and media lease renewed
+          headers:
+            Set-Cookie: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaybackSession" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /me/playback-sessions/{sessionId}:
+    delete:
+      tags: [Playback]
+      operationId: endPlaybackSession
+      summary: End the current-subject playback session
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "204": { description: Playback ended }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /owner/courses:
+    get:
+      tags: [Owner courses]
+      operationId: listOwnerCourses
+      summary: List all courses for owner operations
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Owner course page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoursePage" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Owner courses]
+      operationId: createCourse
+      summary: Create a draft course
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CourseWriteRequest" }
+      responses:
+        "201":
+          description: Draft course created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Course" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /owner/courses/{courseId}:
+    get:
+      tags: [Owner courses]
+      operationId: getOwnerCourse
+      summary: Get a course and its complete curriculum for owner editing
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CourseId"
+      responses:
+        "200":
+          description: Owner curriculum detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CourseWithCurriculum" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Owner courses]
+      operationId: updateCourse
+      summary: Update course metadata
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CourseId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CourseWriteRequest" }
+      responses:
+        "200":
+          description: Course updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Course" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /owner/courses/{courseId}/publish:
+    post:
+      tags: [Owner courses]
+      operationId: publishCourse
+      summary: Publish a valid course
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CourseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Course published
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Course" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /owner/courses/{courseId}/archive:
+    post:
+      tags: [Owner courses]
+      operationId: archiveCourse
+      summary: Archive a course
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CourseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Course archived
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Course" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /owner/courses/{courseId}/sections:
+    post:
+      tags: [Owner courses]
+      operationId: createSection
+      summary: Create a course section
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CourseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SectionWriteRequest" }
+      responses:
+        "201":
+          description: Section created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Section" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /owner/courses/{courseId}/sections/order:
+    put:
+      tags: [Owner courses]
+      operationId: reorderSections
+      summary: Atomically reorder every course section
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CourseId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrderedIdsRequest" }
+      responses:
+        "204": { description: Sections reordered atomically }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /owner/sections/{sectionId}:
+    patch:
+      tags: [Owner courses]
+      operationId: updateSection
+      summary: Update a course section
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/SectionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SectionWriteRequest" }
+      responses:
+        "200":
+          description: Section updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Section" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /owner/sections/{sectionId}/lessons:
+    post:
+      tags: [Owner courses]
+      operationId: createLesson
+      summary: Create a section lesson
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/SectionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LessonWriteRequest" }
+      responses:
+        "201":
+          description: Lesson created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Lesson" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /owner/sections/{sectionId}/lessons/order:
+    put:
+      tags: [Owner courses]
+      operationId: reorderLessons
+      summary: Atomically reorder every section lesson
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/SectionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrderedIdsRequest" }
+      responses:
+        "204": { description: Lessons reordered atomically }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /owner/lessons/{lessonId}:
+    patch:
+      tags: [Owner courses]
+      operationId: updateLesson
+      summary: Update a lesson
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/LessonId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LessonWriteRequest" }
+      responses:
+        "200":
+          description: Lesson updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Lesson" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /owner/courses/{courseId}/enrollments:
+    get:
+      tags: [Owner enrollments]
+      operationId: listCourseEnrollments
+      summary: List enrollment records for one course
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CourseId"
+      responses:
+        "200":
+          description: Enrollment page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnrollmentPage" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Owner enrollments]
+      operationId: grantEnrollment
+      summary: Grant course access to a student
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CourseId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EnrollmentWriteRequest" }
+      responses:
+        "201":
+          description: Enrollment granted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Enrollment" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /owner/enrollments/{enrollmentId}:
+    patch:
+      tags: [Owner enrollments]
+      operationId: updateEnrollment
+      summary: Update an enrollment access window or suspension
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/EnrollmentId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EnrollmentWriteRequest" }
+      responses:
+        "200":
+          description: Enrollment updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Enrollment" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /owner/students:
+    get:
+      tags: [Owner users]
+      operationId: searchStudents
+      summary: Search students using a least-data operational response
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: query
+          in: query
+          schema: { type: string, maxLength: 200 }
+      responses:
+        "200":
+          description: Student page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudentPage" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /owner/enrollments/{enrollmentId}/revoke:
+    post:
+      tags: [Owner enrollments]
+      operationId: revokeEnrollment
+      summary: Permanently revoke an enrollment grant
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/EnrollmentId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Enrollment revoked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Enrollment" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /owner/lessons/{lessonId}/video-uploads:
+    post:
+      tags: [Owner videos]
+      operationId: initiateVideoUpload
+      summary: Authorize a direct private video upload
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/LessonId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VideoUploadRequest" }
+      responses:
+        "201":
+          description: Direct private upload authorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VideoUpload" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /owner/lessons/{lessonId}/resources:
+    post:
+      tags: [Owner courses]
+      operationId: initiateLessonResourceUpload
+      summary: Authorize a direct private lesson-resource upload
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/LessonId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LessonResourceUploadRequest" }
+      responses:
+        "201":
+          description: Temporary private upload authorization
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LessonResourceUpload" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /owner/lesson-resources/{resourceId}/complete:
+    post:
+      tags: [Owner courses]
+      operationId: completeLessonResourceUpload
+      summary: Verify a private lesson-resource upload
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "200":
+          description: Resource ready
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LessonResource" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /me/lesson-resources/{resourceId}/download:
+    post:
+      tags: [Learning]
+      operationId: createLessonResourceDownload
+      summary: Authorize a short-lived download for an enrolled subject
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "201":
+          description: Five-minute private download authorization
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LessonResourceDownload" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /owner/video-uploads/{uploadId}/complete:
+    post:
+      tags: [Owner videos]
+      operationId: completeVideoUpload
+      summary: Verify upload completion and queue processing
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/UploadId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202":
+          description: Upload verified and processing queued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Video" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /owner/video-uploads/{uploadId}/parts/{partNumber}:
+    post:
+      tags: [Owner videos]
+      operationId: createVideoUploadPartUrl
+      summary: Authorize one direct multipart upload part
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/UploadId"
+        - name: partNumber
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 10000 }
+      responses:
+        "201":
+          description: Temporary part upload URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [uploadUrl]
+                properties: { uploadUrl: { type: string, format: uri } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /owner/video-uploads/{uploadId}/multipart-complete:
+    post:
+      tags: [Owner videos]
+      operationId: completeMultipartVideoUpload
+      summary: Complete, verify, and queue a multipart video upload
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/UploadId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompleteMultipartUploadRequest" }
+      responses:
+        "202":
+          description: Multipart upload verified and processing queued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Video" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /owner/videos/{videoId}:
+    get:
+      tags: [Owner videos]
+      operationId: getVideo
+      summary: Get video processing status
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/VideoId"
+      responses:
+        "200":
+          description: Video processing status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Video" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /owner/videos/{videoId}/retry:
+    post:
+      tags: [Owner videos]
+      operationId: retryVideoProcessing
+      summary: Queue a new attempt for a failed video
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/VideoId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202":
+          description: New processing attempt queued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Video" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /owner/lessons/{lessonId}/videos/{videoId}/activate:
+    post:
+      tags: [Owner videos]
+      operationId: activateVideo
+      summary: Activate a ready video for its lesson
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/LessonId"
+        - $ref: "#/components/parameters/VideoId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Ready video atomically activated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Video" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: lms_refresh
+
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string, maxLength: 512 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 16, maxLength: 128 }
+    CourseId: { name: courseId, in: path, required: true, schema: { $ref: "#/components/schemas/Uuid" } }
+    SectionId: { name: sectionId, in: path, required: true, schema: { $ref: "#/components/schemas/Uuid" } }
+    LessonId: { name: lessonId, in: path, required: true, schema: { $ref: "#/components/schemas/Uuid" } }
+    DeviceId: { name: deviceId, in: path, required: true, schema: { $ref: "#/components/schemas/Uuid" } }
+    SessionId: { name: sessionId, in: path, required: true, schema: { $ref: "#/components/schemas/Uuid" } }
+    EnrollmentId: { name: enrollmentId, in: path, required: true, schema: { $ref: "#/components/schemas/Uuid" } }
+    VideoId: { name: videoId, in: path, required: true, schema: { $ref: "#/components/schemas/Uuid" } }
+    UploadId: { name: uploadId, in: path, required: true, schema: { $ref: "#/components/schemas/Uuid" } }
+    ResourceId: { name: resourceId, in: path, required: true, schema: { $ref: "#/components/schemas/Uuid" } }
+
+  responses:
+    ValidationFailed:
+      description: Request validation failed
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unauthorized:
+      description: Authentication failed
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Forbidden:
+      description: Authorization or account policy denied access
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: Resource not found or concealed by authorization
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Conflict:
+      description: State or uniqueness conflict
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unprocessable:
+      description: Semantically invalid upload or processing input
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    DependencyUnavailable:
+      description: Required dependency is unavailable
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  schemas:
+    Uuid: { type: string, format: uuid }
+    Timestamp: { type: string, format: date-time }
+    Error:
+      type: object
+      additionalProperties: false
+      required: [statusCode, code, message, requestId]
+      properties:
+        statusCode: { type: integer, minimum: 400, maximum: 599 }
+        code: { type: string, pattern: "^[A-Z][A-Z0-9_]+$" }
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+        requestId: { $ref: "#/components/schemas/Uuid" }
+    HealthResponse:
+      type: object
+      required: [status, info]
+      properties:
+        status: { type: string, enum: [ok] }
+        info:
+          type: object
+          required: [database, redis]
+          properties:
+            database: { $ref: "#/components/schemas/HealthIndicator" }
+            redis: { $ref: "#/components/schemas/HealthIndicator" }
+    HealthIndicator:
+      type: object
+      required: [status]
+      properties: { status: { type: string, enum: [up, down] } }
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password, firstName, lastName]
+      properties:
+        email: { type: string, format: email, maxLength: 320 }
+        password: { type: string, minLength: 12, maxLength: 128 }
+        firstName: { type: string, minLength: 1, maxLength: 100 }
+        lastName: { type: string, minLength: 1, maxLength: 100 }
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password, device]
+      properties:
+        email: { type: string, format: email, maxLength: 320 }
+        password: { type: string, maxLength: 128 }
+        device: { $ref: "#/components/schemas/DeviceInput" }
+    DeviceInput:
+      type: object
+      additionalProperties: false
+      required: [clientDeviceId, name]
+      properties:
+        clientDeviceId: { $ref: "#/components/schemas/Uuid" }
+        name: { type: string, minLength: 1, maxLength: 120 }
+    TokenResponse:
+      type: object
+      additionalProperties: false
+      required: [accessToken, accessTokenExpiresIn]
+      properties:
+        accessToken: { type: string }
+        accessTokenExpiresIn: { type: integer, minimum: 1, example: 900 }
+    AuthResponse:
+      allOf:
+        - $ref: "#/components/schemas/TokenResponse"
+        - type: object
+          required: [user, device]
+          properties:
+            user: { $ref: "#/components/schemas/User" }
+            device: { $ref: "#/components/schemas/Device" }
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, email, firstName, lastName, status, roles, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        email: { type: string, format: email }
+        firstName: { type: string }
+        lastName: { type: string }
+        status: { type: string, enum: [PENDING_VERIFICATION, ACTIVE, SUSPENDED, DISABLED] }
+        roles: { type: array, items: { type: string, enum: [OWNER, STUDENT] } }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    Device:
+      type: object
+      additionalProperties: false
+      required: [id, clientDeviceId, name, firstSeenAt, lastSeenAt, revoked]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        clientDeviceId: { $ref: "#/components/schemas/Uuid" }
+        name: { type: string }
+        browser: { type: [string, "null"] }
+        operatingSystem: { type: [string, "null"] }
+        firstSeenAt: { $ref: "#/components/schemas/Timestamp" }
+        lastSeenAt: { $ref: "#/components/schemas/Timestamp" }
+        revoked: { type: boolean }
+    Course:
+      type: object
+      additionalProperties: false
+      required: [id, title, slug, description, status, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        title: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        thumbnailUrl: { type: [string, "null"], format: uri }
+        status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+        publishedAt: { type: [string, "null"], format: date-time }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    CoursePage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Course" } }
+        nextCursor: { type: [string, "null"] }
+    CourseWithCurriculum:
+      allOf:
+        - $ref: "#/components/schemas/Course"
+        - type: object
+          required: [sections]
+          properties:
+            sections: { type: array, items: { $ref: "#/components/schemas/Section" } }
+    CourseWriteRequest:
+      type: object
+      additionalProperties: false
+      required: [title, slug, description]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        slug: { type: string, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 200 }
+        description: { type: string, minLength: 1, maxLength: 20000 }
+    Section:
+      type: object
+      required: [id, courseId, title, sortOrder, lessons]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        courseId: { $ref: "#/components/schemas/Uuid" }
+        title: { type: string }
+        description: { type: [string, "null"] }
+        sortOrder: { type: integer, minimum: 0 }
+        lessons: { type: array, items: { $ref: "#/components/schemas/Lesson" } }
+    SectionWriteRequest:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: [string, "null"], maxLength: 10000 }
+    Lesson:
+      type: object
+      required: [id, sectionId, title, type, sortOrder]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        sectionId: { $ref: "#/components/schemas/Uuid" }
+        title: { type: string }
+        description: { type: [string, "null"] }
+        type: { type: string, enum: [VIDEO, TEXT] }
+        textContent: { type: [string, "null"] }
+        sortOrder: { type: integer, minimum: 0 }
+        progress: { oneOf: [{ $ref: "#/components/schemas/LessonProgress" }, { type: "null" }] }
+        resources:
+          type: array
+          items: { $ref: "#/components/schemas/LessonResource" }
+    LessonResource:
+      type: object
+      additionalProperties: false
+      required: [id, lessonId, title, filename, mimeType, sizeBytes, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        lessonId: { $ref: "#/components/schemas/Uuid" }
+        title: { type: string }
+        filename: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: string, pattern: "^[1-9][0-9]*$" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    LessonResourceUploadRequest:
+      type: object
+      additionalProperties: false
+      required: [title, filename, mimeType, sizeBytes]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        filename: { type: string, minLength: 1, maxLength: 255 }
+        mimeType:
+          type: string
+          enum: [application/pdf, text/plain, application/zip, application/vnd.openxmlformats-officedocument.wordprocessingml.document]
+        sizeBytes: { type: integer, minimum: 1, maximum: 104857600 }
+    LessonResourceUpload:
+      allOf:
+        - $ref: "#/components/schemas/LessonResource"
+        - type: object
+          required: [uploadUrl, expiresAt]
+          properties:
+            uploadUrl: { type: string, format: uri }
+            expiresAt: { $ref: "#/components/schemas/Timestamp" }
+    LessonResourceDownload:
+      type: object
+      additionalProperties: false
+      required: [id, title, filename, mimeType, sizeBytes, downloadUrl, expiresIn]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        title: { type: string }
+        filename: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: string, pattern: "^[1-9][0-9]*$" }
+        downloadUrl: { type: string, format: uri }
+        expiresIn: { type: integer, enum: [300] }
+    LessonWriteRequest:
+      type: object
+      additionalProperties: false
+      required: [title, type]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: [string, "null"], maxLength: 10000 }
+        type: { type: string, enum: [VIDEO, TEXT] }
+        textContent: { type: [string, "null"], maxLength: 100000 }
+    OrderedIdsRequest:
+      type: object
+      additionalProperties: false
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/Uuid" }
+    EnrollmentWriteRequest:
+      type: object
+      additionalProperties: false
+      required: [userId, startsAt]
+      properties:
+        userId: { $ref: "#/components/schemas/Uuid" }
+        startsAt: { $ref: "#/components/schemas/Timestamp" }
+        expiresAt: { type: [string, "null"], format: date-time }
+        status: { type: string, enum: [ACTIVE, SUSPENDED] }
+    Enrollment:
+      type: object
+      required: [id, userId, courseId, status, startsAt, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        userId: { $ref: "#/components/schemas/Uuid" }
+        courseId: { $ref: "#/components/schemas/Uuid" }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, REVOKED, EXPIRED] }
+        startsAt: { $ref: "#/components/schemas/Timestamp" }
+        expiresAt: { type: [string, "null"], format: date-time }
+        completedAt: { type: [string, "null"], format: date-time }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    EnrollmentPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Enrollment" } }
+        nextCursor: { type: [string, "null"] }
+    StudentSummary:
+      type: object
+      additionalProperties: false
+      required: [id, email, firstName, lastName, status, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        email: { type: string, format: email }
+        firstName: { type: string }
+        lastName: { type: string }
+        status: { type: string, enum: [PENDING_VERIFICATION, ACTIVE, SUSPENDED, DISABLED] }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    StudentPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/StudentSummary" } }
+        nextCursor: { type: [string, "null"] }
+    ProgressRequest:
+      type: object
+      additionalProperties: false
+      required: [positionSeconds, watchedSeconds]
+      properties:
+        positionSeconds: { type: integer, minimum: 0 }
+        watchedSeconds: { type: integer, minimum: 0 }
+    LessonProgress:
+      type: object
+      required: [lessonId, lastPositionSeconds, maximumPositionSeconds, watchedSeconds, percentage]
+      properties:
+        lessonId: { $ref: "#/components/schemas/Uuid" }
+        lastPositionSeconds: { type: integer, minimum: 0 }
+        maximumPositionSeconds: { type: integer, minimum: 0 }
+        watchedSeconds: { type: integer, minimum: 0 }
+        percentage: { type: number, minimum: 0, maximum: 100 }
+        completedAt: { type: [string, "null"], format: date-time }
+    PlaybackSession:
+      type: object
+      additionalProperties: false
+      required: [id, lessonId, videoId, status, hlsUrl, sessionCode, lastPositionSeconds]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        lessonId: { $ref: "#/components/schemas/Uuid" }
+        videoId: { $ref: "#/components/schemas/Uuid" }
+        status: { type: string, enum: [ACTIVE, ENDED, EXPIRED, REVOKED, REPLACED] }
+        hlsUrl: { type: string, pattern: "^/media/hls/" }
+        sessionCode: { type: string }
+        lastPositionSeconds: { type: integer, minimum: 0 }
+    VideoUploadRequest:
+      type: object
+      additionalProperties: false
+      required: [filename, mimeType, sizeBytes]
+      properties:
+        filename: { type: string, minLength: 1, maxLength: 255 }
+        mimeType: { type: string, enum: [video/mp4, video/quicktime, video/x-matroska] }
+        sizeBytes: { type: integer, minimum: 1 }
+    VideoUpload:
+      type: object
+      additionalProperties: false
+      required: [id, videoId, status, uploadMode, uploadUrl, partSizeBytes, expiresAt]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        videoId: { $ref: "#/components/schemas/Uuid" }
+        status: { type: string, enum: [PENDING, UPLOADING] }
+        uploadMode: { type: string, enum: [SINGLE, MULTIPART] }
+        uploadUrl: { type: [string, "null"], format: uri }
+        partSizeBytes: { type: [integer, "null"], minimum: 5242880 }
+        expiresAt: { $ref: "#/components/schemas/Timestamp" }
+    CompleteMultipartUploadRequest:
+      type: object
+      additionalProperties: false
+      required: [parts]
+      properties:
+        parts:
+          type: array
+          minItems: 1
+          maxItems: 10000
+          items:
+            type: object
+            additionalProperties: false
+            required: [partNumber, etag]
+            properties:
+              partNumber: { type: integer, minimum: 1, maximum: 10000 }
+              etag: { type: string, minLength: 1, maxLength: 130 }
+    Video:
+      type: object
+      additionalProperties: false
+      required: [id, lessonId, status, sourceFilename, sourceSizeBytes, isCurrent, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        lessonId: { $ref: "#/components/schemas/Uuid" }
+        status: { type: string, enum: [UPLOADING, UPLOADED, QUEUED, PROCESSING, READY, FAILED, DELETING, DELETED] }
+        sourceFilename: { type: string }
+        sourceSizeBytes: { type: integer, minimum: 1 }
+        durationSeconds: { type: [integer, "null"], minimum: 0 }
+        width: { type: [integer, "null"], minimum: 1 }
+        height: { type: [integer, "null"], minimum: 1 }
+        isCurrent: { type: boolean }
+        processingError: { type: [string, "null"] }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }

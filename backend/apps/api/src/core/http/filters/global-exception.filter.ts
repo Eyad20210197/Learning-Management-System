@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { BaseExceptionFilter, HttpAdapterHost } from '@nestjs/core';
+import { DomainError } from '@lms/shared-kernel';
 import type { Request } from 'express';
 
 interface ErrorEnvelope {
@@ -36,9 +37,15 @@ export class GlobalExceptionFilter extends BaseExceptionFilter {
     const statusCode: HttpStatus =
       exception instanceof HttpException
         ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+        : exception instanceof DomainError
+          ? this.domainStatus(exception.code)
+          : HttpStatus.INTERNAL_SERVER_ERROR;
     const exceptionResponse =
-      exception instanceof HttpException ? exception.getResponse() : undefined;
+      exception instanceof HttpException
+        ? exception.getResponse()
+        : exception instanceof DomainError
+          ? { code: exception.code, message: exception.message }
+          : undefined;
     const body = this.createEnvelope(
       statusCode,
       exceptionResponse,
@@ -110,6 +117,37 @@ export class GlobalExceptionFilter extends BaseExceptionFilter {
   }
 
   private defaultCode(statusCode: HttpStatus): string {
+    if (statusCode === HttpStatus.TOO_MANY_REQUESTS) {
+      return 'RATE_LIMIT_EXCEEDED';
+    }
     return HttpStatus[statusCode] ?? 'HTTP_ERROR';
+  }
+
+  private domainStatus(code: string): HttpStatus {
+    const statuses: Readonly<Record<string, HttpStatus>> = {
+      EMAIL_ALREADY_REGISTERED: HttpStatus.CONFLICT,
+      INVALID_EMAIL: HttpStatus.BAD_REQUEST,
+      INVALID_CREDENTIALS: HttpStatus.UNAUTHORIZED,
+      ACCESS_TOKEN_INVALID: HttpStatus.UNAUTHORIZED,
+      REFRESH_TOKEN_INVALID: HttpStatus.UNAUTHORIZED,
+      REFRESH_TOKEN_REUSED: HttpStatus.UNAUTHORIZED,
+      PASSWORD_RESET_TOKEN_INVALID: HttpStatus.UNAUTHORIZED,
+      ACCOUNT_NOT_ACTIVE: HttpStatus.FORBIDDEN,
+      DEVICE_LIMIT_REACHED: HttpStatus.FORBIDDEN,
+      DEVICE_REVOKED: HttpStatus.FORBIDDEN,
+      PERMISSION_DENIED: HttpStatus.FORBIDDEN,
+      RESOURCE_NOT_FOUND: HttpStatus.NOT_FOUND,
+      COURSE_ACCESS_DENIED: HttpStatus.FORBIDDEN,
+      ENROLLMENT_NOT_STARTED: HttpStatus.FORBIDDEN,
+      ENROLLMENT_EXPIRED: HttpStatus.FORBIDDEN,
+      INVALID_STATE_TRANSITION: HttpStatus.CONFLICT,
+      IDEMPOTENCY_KEY_REQUIRED: HttpStatus.BAD_REQUEST,
+      IDEMPOTENCY_KEY_CONFLICT: HttpStatus.CONFLICT,
+      MEDIA_RESOURCE_NOT_FOUND: HttpStatus.NOT_FOUND,
+      INVALID_UPLOAD: HttpStatus.UNPROCESSABLE_ENTITY,
+      UPLOAD_STATE_CONFLICT: HttpStatus.CONFLICT,
+    };
+
+    return statuses[code] ?? HttpStatus.BAD_REQUEST;
   }
 }

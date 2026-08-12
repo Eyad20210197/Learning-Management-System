@@ -1,2 +1,12 @@
-/** Identity use cases and their input/output ports. */
-export {};
+export * from './ports/auth-session-repository.port';
+export * from './ports/password-hasher.port';
+export * from './ports/password-reset-notifier.port';
+export * from './ports/password-reset-repository.port';
+export * from './ports/token-service.port';
+export * from './ports/user-repository.port';
+export * from './use-cases/authenticate-access.use-case';
+export * from './use-cases/login.use-case';
+export * from './use-cases/password.use-cases';
+export * from './use-cases/refresh-session.use-case';
+export * from './use-cases/register-student.use-case';
+export * from './use-cases/session-management.use-cases';

@@ -8,7 +8,7 @@ The current language and phase decision is recorded in [ADR-0001](../Documentati
 
 ```text
 LMS/
-├── compose.yaml                     # Local PostgreSQL and Redis
+├── compose.yaml                     # Local PostgreSQL, Redis, and private object storage
 ├── backend/
 │   ├── apps/
 │   │   ├── api/                     # HTTP composition root
@@ -72,7 +72,7 @@ Copy-Item .env.example .env
 cp .env.example .env
 ```
 
-The example values bind PostgreSQL and Redis only to loopback and match the local Compose services. Never commit `.env`.
+The example values bind PostgreSQL, Redis, and MinIO only to loopback and match the local Compose services. Production uses the same S3-compatible port with a private Cloudflare R2 endpoint. Never commit `.env`.
 
 Start infrastructure, generate the Prisma Client, validate the schema, and apply checked-in migrations:
 
@@ -119,12 +119,15 @@ The Swagger document is a development view of implemented endpoints. It does not
 
 Startup validation fails fast when required configuration is missing or invalid.
 
-| Group           | Variables                                                                          |
-| --------------- | ---------------------------------------------------------------------------------- |
-| Application     | `NODE_ENV`, `API_PORT`, `APP_URL`, `CORS_ORIGINS`, `LOG_LEVEL`, `API_DOCS_ENABLED` |
-| PostgreSQL      | `DATABASE_URL`, `DATABASE_POOL_MAX`                                                |
-| Redis and queue | `REDIS_URL`, `VIDEO_QUEUE_PREFIX`                                                  |
-| Local Compose   | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT`, `REDIS_PORT` |
+| Group           | Variables                                                                                                                                                      |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Application     | `NODE_ENV`, `API_PORT`, `APP_URL`, `CORS_ORIGINS`, `LOG_LEVEL`, `API_DOCS_ENABLED`                                                                             |
+| Authentication  | `JWT_ACCESS_SECRET`, `JWT_ACCESS_TTL_SECONDS`, `REFRESH_TOKEN_SECRET`, `REFRESH_TOKEN_TTL_SECONDS`, `MAX_REGISTERED_DEVICES`, `PASSWORD_RESET_TTL_SECONDS`     |
+| Email           | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` (required in production)                                                    |
+| PostgreSQL      | `DATABASE_URL`, `DATABASE_POOL_MAX`                                                                                                                            |
+| Redis and queue | `REDIS_URL`, `VIDEO_QUEUE_PREFIX`                                                                                                                              |
+| Object storage  | `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_REGION`, `OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`, `OBJECT_STORAGE_BUCKET`, upload limits |
+| Local Compose   | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT`, `REDIS_PORT`                                                                             |
 
 `CORS_ORIGINS` accepts comma-separated HTTP(S) origins without paths. Disable API documentation in production unless it is deliberately protected and required.
 
@@ -146,20 +149,24 @@ Startup validation fails fast when required configuration is missing or invalid.
 | `npm run format`                          | Apply Prettier formatting                               |
 | `npm test`                                | Run unit tests                                          |
 | `npm run test:e2e`                        | Run API end-to-end tests                                |
+| `npm run contracts:lint`                  | Validate canonical OpenAPI and DBML contracts           |
 | `npm run test:cov`                        | Run tests with coverage                                 |
 | `npm run prisma:generate`                 | Generate the Prisma Client                              |
 | `npm run prisma:validate`                 | Validate Prisma configuration and schema                |
 | `npm run db:migrate:dev -- --name <name>` | Create/apply a local development migration              |
 | `npm run db:migrate:deploy`               | Apply checked-in migrations without development prompts |
+| `npm run db:seed`                         | Seed roles and the permission catalogue                 |
+| `npm run db:create-owner`                 | Create the sole owner from protected environment input  |
 | `npm run db:studio`                       | Open Prisma Studio                                      |
-| `npm run infra:up`                        | Start local PostgreSQL and Redis                        |
-| `npm run infra:logs`                      | Follow PostgreSQL and Redis logs                        |
+| `npm run infra:up`                        | Start PostgreSQL, Redis, and private object storage     |
+| `npm run infra:logs`                      | Follow local infrastructure logs                        |
 | `npm run infra:down`                      | Stop local infrastructure without deleting volumes      |
 
 Before handing off a change, run:
 
 ```bash
 npm run format:check
+npm run contracts:lint
 npm run lint
 npm run typecheck
 npm test
@@ -181,15 +188,14 @@ npm run start:prod:api
 
 Run `npm run start:prod:worker` in a second service/process with the same validated infrastructure configuration. Production deployment, TLS, Nginx, secrets management, backups, and monitoring are later release-readiness work.
 
-## Phase 0 boundaries
+## Current implementation boundaries
 
-This phase provides framework and infrastructure foundations only. It intentionally does not implement:
+The foundation, canonical contracts, identity schema, registration, login, rotating sessions, device revocation, and RBAC guard are implemented. It intentionally does not yet implement:
 
-- authentication, RBAC, users, devices, sessions, or owner seeding;
+- the owner operations UI;
 - courses, lessons, enrollments, progress, or other LMS business schema;
 - R2 storage, uploads, FFmpeg/FFprobe processing, or functional queue jobs;
 - playback leases, HLS delivery, the Cloudflare media gateway, or the frontend;
-- frozen ERD, state-machine, authorization-matrix, or canonical OpenAPI contracts;
 - production deployment, backups, monitoring, or load/security suites.
 
 The context modules and video queue are deliberate extension points, not claims that those product capabilities already exist.

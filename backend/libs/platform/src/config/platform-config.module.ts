@@ -5,6 +5,7 @@ import { databaseConfig } from './database.config';
 import { validateEnvironment } from './environment.validation';
 import { queueConfig } from './queue.config';
 import { redisConfig } from './redis.config';
+import { storageConfig } from './storage.config';
 
 @Global()
 @Module({
@@ -13,7 +14,13 @@ import { redisConfig } from './redis.config';
       isGlobal: true,
       cache: true,
       expandVariables: false,
-      load: [appConfig, databaseConfig, redisConfig, queueConfig],
+      load: [
+        appConfig,
+        databaseConfig,
+        redisConfig,
+        queueConfig,
+        storageConfig,
+      ],
       validate: validateEnvironment,
     }),
   ],

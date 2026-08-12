@@ -1,14 +1,14 @@
-# LMS V1 — JavaScript Implementation Plan
+# LMS V1 — TypeScript Implementation Plan
 
 ## Status and authority
 
-This is the authoritative v1 implementation plan. It replaces the earlier multi-instructor, TypeScript, and MP4-delivery assumptions in the historical documentation.
+This is the authoritative v1 implementation plan. It replaces the earlier multi-instructor and MP4-delivery assumptions in the historical documentation. ADR-0001 amends the original language decision to strict TypeScript.
 
 The application is a single-owner LMS:
 
 - one `OWNER` creates, publishes, and controls all content and student access;
 - `STUDENT` users consume only lessons covered by an active enrollment;
-- all application source uses JavaScript (`.js` and `.jsx`), not TypeScript;
+- all application source uses strict TypeScript (`.ts` and `.tsx`);
 - NestJS is the only business, authentication, authorization, and data-access backend;
 - video delivery is HLS-only, from private R2 through a Cloudflare Worker media gateway.
 
@@ -17,14 +17,14 @@ The application is a single-owner LMS:
 | Area | Decision |
 | --- | --- |
 | Roles | Seed only `OWNER` and `STUDENT`. No instructor, administrator, support, or public role-management UI. |
-| Backend | Node.js 20+, NestJS in JavaScript, PostgreSQL, Prisma, Redis, BullMQ, FFmpeg/FFprobe. |
-| Frontend | React JavaScript, Vite, React Router in SPA mode, TanStack Query, `hls.js` with native HLS fallback. |
+| Backend | Node.js 24, NestJS in strict TypeScript, PostgreSQL, Prisma, Redis, BullMQ, FFmpeg/FFprobe. |
+| Frontend | React TypeScript, Vite, React Router in SPA mode, TanStack Query, `hls.js` with native HLS fallback. |
 | Video | H.264/AAC HLS. Generate at most 360p, 720p, and 1080p; never upscale. |
 | Storage | Private Cloudflare R2. Direct presigned URLs are for owner uploads only, never student playback. |
 | Playback | Same-origin Cloudflare Worker at `/media/*`, short-lived media lease cookie, one concurrent stream, moving watermark, heartbeats. |
 | Auth | Short-lived access token held only in browser memory; rotating refresh cookie; separate scoped media cookie. |
 | Enrollment | Manual owner grants in v1. Payments, coupons, subscriptions, and anonymous video previews are deferred. |
-| API | REST under `/api/v1`, source-controlled OpenAPI 3.1 contract, stable error codes, generated JavaScript client. |
+| API | REST under `/api/v1`, source-controlled OpenAPI 3.1 contract, stable error codes, generated typed client. |
 
 ## 2. Product boundary
 
@@ -77,29 +77,29 @@ The development topology mirrors production as closely as practical:
 
 The API never streams video bytes in production and never runs FFmpeg in an HTTP request.
 
-## 4. JavaScript standards
+## 4. TypeScript standards
 
 ### Language and module conventions
 
-- Backend, worker, scripts, and frontend use JavaScript only.
-- Use `.js` for Node/NestJS/Worker code and `.jsx` for React components.
-- Configure the Nest JavaScript starter's Babel support for decorators; do not introduce `tsconfig.json` or `.ts` files.
-- Use ESM consistently where the selected scaffold supports it; do not mix `require()` and `import` in new code.
+- Backend, worker, edge worker, scripts, and frontend use strict TypeScript.
+- Use `.ts` for Node/NestJS/Worker code and `.tsx` for React components.
+- Keep `strict`, `noImplicitAny`, `noUncheckedIndexedAccess`, and `useUnknownInCatchVariables` enabled.
+- Use one deliberate module strategy per runtime; do not mix `require()` and `import` in application source.
 - Use ESLint and Prettier from the first commit.
-- Use JSDoc on public DTO helpers, adapters, complex service arguments, and external integration boundaries. It improves editor assistance without turning the project into TypeScript.
+- Use explicit types at public ports, DTOs, queue payloads, and external integration boundaries. Avoid `any`.
 
 ### Runtime guardrails
 
 - Validate all environment variables at startup.
 - Validate every HTTP input with Nest DTO validation.
 - Keep database schema validation in Prisma migrations, not in handwritten SQL scattered through services.
-- Treat OpenAPI request/response schemas and integration tests as the contract boundary that compensates for the lack of compile-time TypeScript checks.
+- Treat OpenAPI request/response schemas and integration tests as runtime contract boundaries; TypeScript types do not replace input validation.
 
 ## 5. Repository layout
 
 ```text
 lms/
-├── backend/                     # NestJS JavaScript application
+├── backend/                     # NestJS TypeScript workspace
 │   ├── src/
 │   │   ├── auth/
 │   │   ├── users/
@@ -119,13 +119,13 @@ lms/
 │   │   └── config/
 │   ├── prisma/
 │   └── test/
-├── frontend/                    # React/Vite JavaScript SPA
+├── frontend/                    # React/Vite TypeScript SPA
 │   └── src/
 │       ├── app/
 │       ├── features/
 │       └── shared/
-├── media-worker/                # Cloudflare Worker in JavaScript
-│   └── src/index.js
+├── media-worker/                # Cloudflare Worker in TypeScript
+│   └── src/index.ts
 ├── docs/
 │   ├── erd.dbml
 │   ├── state-machines.md
@@ -311,14 +311,25 @@ POST /owner/lessons/:lessonId/videos/:videoId/activate
 
 - `docs/openapi.yaml` is written before controllers are implemented and reviewed with the ERD.
 - Nest Swagger generates a development OpenAPI document; automated tests compare it with the reviewed contract to identify drift.
-- The frontend consumes a generated JavaScript API client/helpers rather than duplicating request and response shapes by hand.
+- The frontend consumes a generated typed API client/helpers rather than duplicating request and response shapes by hand.
 - Every mutation that a browser or queue can safely retry uses an `Idempotency-Key`, especially enrollment grants and upload completion.
 - All errors use `{ statusCode, code, message, details, requestId }` with stable codes such as `COURSE_ACCESS_DENIED`, `VIDEO_NOT_READY`, `DEVICE_REVOKED`, and `PLAYBACK_REPLACED`.
 - List endpoints define pagination, sorting, filtering, and default limits in the OpenAPI contract.
 
 ## 10. Implementation phases
 
-### Phase 0 — Freeze contracts
+### Phase 0 — TypeScript backend foundation
+
+**Build:**
+
+- scaffold the NestJS workspace with strict TypeScript;
+- configure linting, formatting, Jest, validated environment configuration, request IDs, structured logging, global exception handling, and `/api/v1/health`;
+- add Docker Compose services for PostgreSQL and Redis;
+- initialize Prisma and the separate API and BullMQ worker composition roots.
+
+**Done when:** a new developer can start PostgreSQL and Redis, build both applications, and receive a dependency-aware healthy API response.
+
+### Phase 1 — Freeze contracts
 
 **Build:**
 
@@ -329,19 +340,6 @@ POST /owner/lessons/:lessonId/videos/:videoId/activate
 - `.env.example` listing all required variables without values.
 
 **Done when:** schema, state transitions, permissions, error codes, and endpoint request/response examples have no unresolved contradiction.
-
-### Phase 1 — JavaScript foundation
-
-**Build:**
-
-- scaffold `backend/` with `npx @nestjs/cli@latest new backend --language JS`;
-- configure JavaScript linting, formatting, Jest, environment validation, request IDs, structured logging, global exception handling, and `/api/v1/health`;
-- add Docker Compose services for PostgreSQL and Redis;
-- initialize Prisma, create the first migration, and add a reproducible seed command;
-- scaffold `frontend/` as a React JavaScript Vite application and configure SPA fallback routing;
-- scaffold `media-worker/` with Wrangler in JavaScript but do not expose any R2 object yet.
-
-**Done when:** a new developer can clone the project, populate local environment values, start all local dependencies, apply migrations, seed the owner, and receive a healthy API response.
 
 ### Phase 2 — Identity, devices, and RBAC
 
