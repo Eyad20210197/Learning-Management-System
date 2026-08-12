@@ -1,0 +1,47 @@
+# Dependencies
+**/node_modules/
+
+# Compiled output and test artifacts
+**/dist/
+**/coverage/
+**/.cache/
+**/.eslintcache
+**/*.tsbuildinfo
+
+# Local environment files; examples remain versioned
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+/backend/node_modules/
+/backend/.env.example
+
+# Prisma Client is reproducibly generated from the checked-in schema
+/backend/libs/platform/src/database/generated/prisma/
+
+# Logs and process files
+**/logs/
+*.log
+*.pid
+*.pid.lock
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local processing and backup output
+/backups/
+/temp/
+/tmp/
+/backend/backups/
+/backend/temp/
+/backend/tmp/
+
+# Editor and operating-system metadata
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+

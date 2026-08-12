@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "apps/api/src",
+  "compilerOptions": {
+    "deleteOutDir": true,
+    "webpack": true,
+    "tsConfigPath": "apps/api/tsconfig.app.json"
+  },
+  "monorepo": true,
+  "root": "apps/api",
+  "projects": {
+    "api": {
+      "type": "application",
+      "root": "apps/api",
+      "entryFile": "main",
+      "sourceRoot": "apps/api/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/api/tsconfig.app.json"
+      }
+    },
+    "identity": {
+      "type": "library",
+      "root": "libs/identity",
+      "entryFile": "index",
+      "sourceRoot": "libs/identity/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/identity/tsconfig.lib.json"
+      }
+    },
+    "learning": {
+      "type": "library",
+      "root": "libs/learning",
+      "entryFile": "index",
+      "sourceRoot": "libs/learning/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/learning/tsconfig.lib.json"
+      }
+    },
+    "media": {
+      "type": "library",
+      "root": "libs/media",
+      "entryFile": "index",
+      "sourceRoot": "libs/media/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/media/tsconfig.lib.json"
+      }
+    },
+    "operations": {
+      "type": "library",
+      "root": "libs/operations",
+      "entryFile": "index",
+      "sourceRoot": "libs/operations/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/operations/tsconfig.lib.json"
+      }
+    },
+    "platform": {
+      "type": "library",
+      "root": "libs/platform",
+      "entryFile": "index",
+      "sourceRoot": "libs/platform/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/platform/tsconfig.lib.json"
+      }
+    },
+    "shared-kernel": {
+      "type": "library",
+      "root": "libs/shared-kernel",
+      "entryFile": "index",
+      "sourceRoot": "libs/shared-kernel/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/shared-kernel/tsconfig.lib.json"
+      }
+    },
+    "video-worker": {
+      "type": "application",
+      "root": "apps/video-worker",
+      "entryFile": "main",
+      "sourceRoot": "apps/video-worker/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/video-worker/tsconfig.app.json"
+      }
+    }
+  }
+}

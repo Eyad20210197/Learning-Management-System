@@ -1,0 +1,18 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "../../..",
+  "testEnvironment": "node",
+  "testRegex": "apps/api/test/.*\\.e2e-spec\\.ts$",
+  "setupFiles": ["<rootDir>/apps/api/test/setup-env.ts"],
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "moduleNameMapper": {
+    "^@lms/identity(|/.*)$": "<rootDir>/libs/identity/src/$1",
+    "^@lms/learning(|/.*)$": "<rootDir>/libs/learning/src/$1",
+    "^@lms/media(|/.*)$": "<rootDir>/libs/media/src/$1",
+    "^@lms/operations(|/.*)$": "<rootDir>/libs/operations/src/$1",
+    "^@lms/platform(|/.*)$": "<rootDir>/libs/platform/src/$1",
+    "^@lms/shared-kernel(|/.*)$": "<rootDir>/libs/shared-kernel/src/$1"
+  }
+}

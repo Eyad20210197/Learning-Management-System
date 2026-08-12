@@ -1,0 +1,8 @@
+generator client {
+  provider               = "prisma-client"
+  output                 = "../libs/platform/src/database/generated/prisma"
+  runtime                = "nodejs"
+  moduleFormat           = "cjs"
+  generatedFileExtension = "ts"
+  importFileExtension    = ""
+}

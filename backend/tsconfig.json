@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "resolvePackageJsonExports": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2023",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "incremental": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "strictNullChecks": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitAny": true,
+    "strictBindCallApply": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "useUnknownInCatchVariables": true,
+    "noFallthroughCasesInSwitch": true,
+    "paths": {
+      "@lms/identity": ["libs/identity/src"],
+      "@lms/identity/*": ["libs/identity/src/*"],
+      "@lms/learning": ["libs/learning/src"],
+      "@lms/learning/*": ["libs/learning/src/*"],
+      "@lms/media": ["libs/media/src"],
+      "@lms/media/*": ["libs/media/src/*"],
+      "@lms/operations": ["libs/operations/src"],
+      "@lms/operations/*": ["libs/operations/src/*"],
+      "@lms/platform": ["libs/platform/src"],
+      "@lms/platform/*": ["libs/platform/src/*"],
+      "@lms/shared-kernel": ["libs/shared-kernel/src"],
+      "@lms/shared-kernel/*": ["libs/shared-kernel/src/*"]
+    }
+  }
+}
