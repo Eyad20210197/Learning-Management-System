@@ -5,6 +5,7 @@ import { databaseConfig } from './database.config';
 import { validateEnvironment } from './environment.validation';
 import { queueConfig } from './queue.config';
 import { processingConfig } from './processing.config';
+import { playbackConfig } from './playback.config';
 import { redisConfig } from './redis.config';
 import { storageConfig } from './storage.config';
 
@@ -21,6 +22,7 @@ import { storageConfig } from './storage.config';
         redisConfig,
         queueConfig,
         processingConfig,
+        playbackConfig,
         storageConfig,
       ],
       validate: validateEnvironment,

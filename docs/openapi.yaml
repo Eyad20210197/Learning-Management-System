@@ -30,6 +30,8 @@ tags:
     description: Owner-only upload and processing operations
   - name: Owner users
     description: Least-data student lookup for owner operations
+  - name: Owner operations
+    description: Owner-only support, audit, security, and operational reporting
 security: []
 
 paths:
@@ -41,6 +43,37 @@ paths:
       responses:
         "200":
           description: Dependencies are healthy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthResponse" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+
+  /health/live:
+    get:
+      tags: [Health]
+      operationId: getLiveness
+      summary: Check whether the API process is alive without probing dependencies
+      responses:
+        "200":
+          description: API process is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status]
+                properties: { status: { type: string, enum: [ok] } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: getReadiness
+      summary: Check PostgreSQL, Redis, and the video queue
+      responses:
+        "200":
+          description: Required dependencies are ready
           content:
             application/json:
               schema: { $ref: "#/components/schemas/HealthResponse" }
@@ -756,6 +789,99 @@ paths:
               schema: { $ref: "#/components/schemas/StudentPage" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /owner/students/{studentId}:
+    get:
+      tags: [Owner operations]
+      operationId: getStudentSupport
+      summary: Get a least-data student support view
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/StudentId"
+      responses:
+        "200":
+          description: Student devices, sessions, enrollments, and playback support view
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudentSupport" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /owner/videos:
+    get:
+      tags: [Owner operations]
+      operationId: listVideoOperations
+      summary: List upload, processing-job, and rendition status without storage keys
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: status
+          in: query
+          schema: { type: string, enum: [UPLOADING, UPLOADED, QUEUED, PROCESSING, READY, FAILED, DELETING, DELETED] }
+      responses:
+        "200":
+          description: Video operations page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VideoOperationPage" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /owner/audit-logs:
+    get:
+      tags: [Owner operations]
+      operationId: listAuditLogs
+      summary: List append-only audit records with sensitive metadata redacted
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - { name: action, in: query, schema: { type: string, maxLength: 120 } }
+        - { name: actorUserId, in: query, schema: { $ref: "#/components/schemas/Uuid" } }
+        - { name: targetType, in: query, schema: { type: string, maxLength: 120 } }
+      responses:
+        "200":
+          description: Audit-log page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditLogPage" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /owner/security-events:
+    get:
+      tags: [Owner operations]
+      operationId: listSecurityEvents
+      summary: List security events with optional unresolved-only filtering
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - { name: severity, in: query, schema: { type: string, enum: [INFO, WARNING, HIGH, CRITICAL] } }
+        - { name: unresolvedOnly, in: query, schema: { type: boolean } }
+      responses:
+        "200":
+          description: Security-event page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecurityEventPage" }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /owner/operations/summary:
+    get:
+      tags: [Owner operations]
+      operationId: getOperationsSummary
+      summary: Get a point-in-time operational summary
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Operational counts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperationsSummary" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
   /owner/enrollments/{enrollmentId}/revoke:
     post:
       tags: [Owner enrollments]
@@ -1015,6 +1141,7 @@ components:
     DeviceId: { name: deviceId, in: path, required: true, schema: { $ref: "#/components/schemas/Uuid" } }
     SessionId: { name: sessionId, in: path, required: true, schema: { $ref: "#/components/schemas/Uuid" } }
     EnrollmentId: { name: enrollmentId, in: path, required: true, schema: { $ref: "#/components/schemas/Uuid" } }
+    StudentId: { name: studentId, in: path, required: true, schema: { $ref: "#/components/schemas/Uuid" } }
     VideoId: { name: videoId, in: path, required: true, schema: { $ref: "#/components/schemas/Uuid" } }
     UploadId: { name: uploadId, in: path, required: true, schema: { $ref: "#/components/schemas/Uuid" } }
     ResourceId: { name: resourceId, in: path, required: true, schema: { $ref: "#/components/schemas/Uuid" } }
@@ -1067,10 +1194,11 @@ components:
         status: { type: string, enum: [ok] }
         info:
           type: object
-          required: [database, redis]
+          required: [database, redis, videoQueue]
           properties:
             database: { $ref: "#/components/schemas/HealthIndicator" }
             redis: { $ref: "#/components/schemas/HealthIndicator" }
+            videoQueue: { $ref: "#/components/schemas/HealthIndicator" }
     HealthIndicator:
       type: object
       required: [status]
@@ -1314,6 +1442,162 @@ components:
       properties:
         items: { type: array, items: { $ref: "#/components/schemas/StudentSummary" } }
         nextCursor: { type: [string, "null"] }
+    StudentSupport:
+      type: object
+      additionalProperties: false
+      required: [user, devices, authSessions, enrollments, playbackSessions]
+      properties:
+        user: { $ref: "#/components/schemas/StudentSupportUser" }
+        devices: { type: array, items: { $ref: "#/components/schemas/SupportDevice" } }
+        authSessions: { type: array, items: { $ref: "#/components/schemas/SupportAuthSession" } }
+        enrollments: { type: array, items: { $ref: "#/components/schemas/SupportEnrollment" } }
+        playbackSessions: { type: array, items: { $ref: "#/components/schemas/SupportPlaybackSession" } }
+    StudentSupportUser:
+      type: object
+      additionalProperties: false
+      required: [id, email, firstName, lastName, status, lastLoginAt, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        email: { type: string, format: email }
+        firstName: { type: string }
+        lastName: { type: string }
+        status: { type: string, enum: [PENDING_VERIFICATION, ACTIVE, SUSPENDED, DISABLED] }
+        lastLoginAt: { type: [string, "null"], format: date-time }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    SupportDevice:
+      type: object
+      additionalProperties: false
+      required: [id, clientDeviceId, name, browser, operatingSystem, firstSeenAt, lastSeenAt, revokedAt]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        clientDeviceId: { $ref: "#/components/schemas/Uuid" }
+        name: { type: string }
+        browser: { type: [string, "null"] }
+        operatingSystem: { type: [string, "null"] }
+        firstSeenAt: { $ref: "#/components/schemas/Timestamp" }
+        lastSeenAt: { $ref: "#/components/schemas/Timestamp" }
+        revokedAt: { type: [string, "null"], format: date-time }
+    SupportAuthSession:
+      type: object
+      additionalProperties: false
+      required: [id, deviceId, lastSeenAt, revokedAt, revokeReason, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        deviceId: { $ref: "#/components/schemas/Uuid" }
+        lastSeenAt: { $ref: "#/components/schemas/Timestamp" }
+        revokedAt: { type: [string, "null"], format: date-time }
+        revokeReason: { type: [string, "null"] }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    SupportEnrollment:
+      type: object
+      additionalProperties: false
+      required: [id, courseId, courseTitle, status, startsAt, expiresAt, completedAt, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        courseId: { $ref: "#/components/schemas/Uuid" }
+        courseTitle: { type: string }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, REVOKED, EXPIRED] }
+        startsAt: { $ref: "#/components/schemas/Timestamp" }
+        expiresAt: { type: [string, "null"], format: date-time }
+        completedAt: { type: [string, "null"], format: date-time }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    SupportPlaybackSession:
+      type: object
+      additionalProperties: false
+      required: [id, lessonId, lessonTitle, videoId, deviceId, status, lastHeartbeatAt, endedAt, lastPositionSeconds, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        lessonId: { $ref: "#/components/schemas/Uuid" }
+        lessonTitle: { type: string }
+        videoId: { $ref: "#/components/schemas/Uuid" }
+        deviceId: { $ref: "#/components/schemas/Uuid" }
+        status: { type: string, enum: [ACTIVE, ENDED, EXPIRED, REVOKED, REPLACED] }
+        lastHeartbeatAt: { $ref: "#/components/schemas/Timestamp" }
+        endedAt: { type: [string, "null"], format: date-time }
+        lastPositionSeconds: { type: integer, minimum: 0 }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    VideoOperationPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/VideoOperation" } }
+        nextCursor: { type: [string, "null"], format: uuid }
+    VideoOperation:
+      type: object
+      additionalProperties: false
+      required: [id, lessonId, lessonTitle, courseId, courseTitle, status, sourceFilename, sourceSizeBytes, durationSeconds, width, height, isCurrent, processingError, createdAt, updatedAt, uploads, processingJobs, variants]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        lessonId: { $ref: "#/components/schemas/Uuid" }
+        lessonTitle: { type: string }
+        courseId: { $ref: "#/components/schemas/Uuid" }
+        courseTitle: { type: string }
+        status: { type: string, enum: [UPLOADING, UPLOADED, QUEUED, PROCESSING, READY, FAILED, DELETING, DELETED] }
+        sourceFilename: { type: string }
+        sourceSizeBytes: { type: string, pattern: "^[0-9]+$" }
+        durationSeconds: { type: [integer, "null"], minimum: 0 }
+        width: { type: [integer, "null"], minimum: 1 }
+        height: { type: [integer, "null"], minimum: 1 }
+        isCurrent: { type: boolean }
+        processingError: { type: [string, "null"] }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        uploads: { type: array, items: { type: object, additionalProperties: true } }
+        processingJobs: { type: array, items: { type: object, additionalProperties: true } }
+        variants: { type: array, items: { type: object, additionalProperties: true } }
+    AuditLogPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AuditLogView" } }
+        nextCursor: { type: [string, "null"], format: uuid }
+    AuditLogView:
+      type: object
+      additionalProperties: false
+      required: [id, actorUserId, actorEmail, action, targetType, targetId, requestId, metadata, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        actorUserId: { type: [string, "null"], format: uuid }
+        actorEmail: { type: [string, "null"], format: email }
+        action: { type: string }
+        targetType: { type: string }
+        targetId: { type: [string, "null"] }
+        requestId: { type: [string, "null"], format: uuid }
+        metadata: { type: [object, array, string, number, boolean, "null"] }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    SecurityEventPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/SecurityEventView" } }
+        nextCursor: { type: [string, "null"], format: uuid }
+    SecurityEventView:
+      type: object
+      additionalProperties: false
+      required: [id, userId, userEmail, deviceId, type, severity, metadata, resolvedAt, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/Uuid" }
+        userId: { type: [string, "null"], format: uuid }
+        userEmail: { type: [string, "null"], format: email }
+        deviceId: { type: [string, "null"], format: uuid }
+        type: { type: string }
+        severity: { type: string, enum: [INFO, WARNING, HIGH, CRITICAL] }
+        metadata: { type: [object, array, string, number, boolean, "null"] }
+        resolvedAt: { type: [string, "null"], format: date-time }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    OperationsSummary:
+      type: object
+      additionalProperties: false
+      required: [students, activeEnrollments, publishedCourses, videosProcessing, videosFailed, activePlaybackSessions, unresolvedSecurityEvents, generatedAt]
+      properties:
+        students: { type: integer, minimum: 0 }
+        activeEnrollments: { type: integer, minimum: 0 }
+        publishedCourses: { type: integer, minimum: 0 }
+        videosProcessing: { type: integer, minimum: 0 }
+        videosFailed: { type: integer, minimum: 0 }
+        activePlaybackSessions: { type: integer, minimum: 0 }
+        unresolvedSecurityEvents: { type: integer, minimum: 0 }
+        generatedAt: { $ref: "#/components/schemas/Timestamp" }
     ProgressRequest:
       type: object
       additionalProperties: false
@@ -1334,7 +1618,7 @@ components:
     PlaybackSession:
       type: object
       additionalProperties: false
-      required: [id, lessonId, videoId, status, hlsUrl, sessionCode, lastPositionSeconds]
+      required: [id, lessonId, videoId, status, hlsUrl, sessionCode, lastPositionSeconds, heartbeatIntervalSeconds, leaseExpiresAt]
       properties:
         id: { $ref: "#/components/schemas/Uuid" }
         lessonId: { $ref: "#/components/schemas/Uuid" }
@@ -1343,6 +1627,8 @@ components:
         hlsUrl: { type: string, pattern: "^/media/hls/" }
         sessionCode: { type: string }
         lastPositionSeconds: { type: integer, minimum: 0 }
+        heartbeatIntervalSeconds: { type: integer, minimum: 10, example: 30 }
+        leaseExpiresAt: { $ref: "#/components/schemas/Timestamp" }
     VideoUploadRequest:
       type: object
       additionalProperties: false

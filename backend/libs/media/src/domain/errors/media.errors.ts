@@ -1,4 +1,5 @@
 import { DomainError } from '@lms/shared-kernel';
+export * from './playback.errors';
 
 export class MediaResourceNotFoundError extends DomainError {
   constructor() {

@@ -4,3 +4,6 @@ export * from './processing/ffmpeg-hls.adapter';
 export * from './processing/ffprobe.adapter';
 export * from './processing/media-command.runner';
 export * from './processing/temporary-workspace.adapter';
+export * from './persistence/prisma-playback.repository';
+export * from './playback/redis-playback-lock.adapter';
+export * from './playback/es256-media-lease.adapter';

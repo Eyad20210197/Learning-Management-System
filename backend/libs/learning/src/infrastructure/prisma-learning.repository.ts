@@ -458,6 +458,17 @@ export class PrismaLearningRepository implements LearningRepositoryPort {
     );
   }
 
+  async expireEnrollments(now: Date): Promise<number> {
+    const result = await this.prisma.enrollment.updateMany({
+      where: {
+        status: { in: ['ACTIVE', 'SUSPENDED'] },
+        expiresAt: { lte: now },
+      },
+      data: { status: 'EXPIRED' },
+    });
+    return result.count;
+  }
+
   private async reorder(
     kind: 'section' | 'lesson',
     parentId: string,

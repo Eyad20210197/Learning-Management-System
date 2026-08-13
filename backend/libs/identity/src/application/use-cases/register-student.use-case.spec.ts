@@ -33,6 +33,7 @@ describe('RegisterStudentUseCase', () => {
     const repository: UserRepositoryPort = {
       existsByEmail,
       createStudent,
+      updateProfile: jest.fn(),
     };
     const useCase = new RegisterStudentUseCase(repository, passwordHasher);
 
@@ -66,6 +67,7 @@ describe('RegisterStudentUseCase', () => {
     const repository: UserRepositoryPort = {
       existsByEmail: jest.fn().mockResolvedValue(true),
       createStudent,
+      updateProfile: jest.fn(),
     };
     const useCase = new RegisterStudentUseCase(repository, passwordHasher);
 

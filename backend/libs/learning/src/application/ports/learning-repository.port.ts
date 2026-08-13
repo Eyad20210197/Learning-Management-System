@@ -108,6 +108,7 @@ export interface LearningRepositoryPort {
     lessonId: string,
     input: { positionSeconds: number; watchedSeconds: number },
   ): Promise<LessonProgressView>;
+  expireEnrollments(now: Date): Promise<number>;
 }
 
 export const LEARNING_REPOSITORY = Symbol('learning.repository');

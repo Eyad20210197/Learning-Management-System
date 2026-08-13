@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { IdentityModule } from '@lms/identity';
 import { OperationsModule } from '@lms/operations';
-import { DatabaseModule } from '@lms/platform';
+import { DatabaseModule, PlatformSchedulingModule } from '@lms/platform';
 import * as UseCases from './application';
 import { LEARNING_REPOSITORY } from './application';
 import { PrismaLearningRepository } from './infrastructure';
+import { EnrollmentMaintenanceService } from './infrastructure/scheduling/enrollment-maintenance.service';
 import {
   CatalogController,
   OwnerLearningController,
@@ -36,10 +37,16 @@ const useCases = [
   UseCases.GetMyCourseUseCase,
   UseCases.GetMyLessonUseCase,
   UseCases.UpdateLessonProgressUseCase,
+  UseCases.ExpireEnrollmentsUseCase,
 ];
 
 @Module({
-  imports: [DatabaseModule, IdentityModule, OperationsModule],
+  imports: [
+    DatabaseModule,
+    PlatformSchedulingModule,
+    IdentityModule,
+    OperationsModule,
+  ],
   controllers: [
     CatalogController,
     OwnerLearningController,
@@ -47,7 +54,9 @@ const useCases = [
   ],
   providers: [
     ...useCases,
+    EnrollmentMaintenanceService,
     { provide: LEARNING_REPOSITORY, useClass: PrismaLearningRepository },
   ],
+  exports: [UseCases.CourseAccessService, LEARNING_REPOSITORY],
 })
 export class LearningModule {}

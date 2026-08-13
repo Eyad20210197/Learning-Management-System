@@ -72,7 +72,7 @@ export class ProcessVideoUseCase {
         probe,
         renditions: selectVideoRenditions(probe.width, probe.height),
       });
-      const prefix = `processed/${input.videoId}/${input.processingJobId}`;
+      const prefix = `processed/${input.videoId}/hls`;
       for (const file of output.files) {
         const key = `${prefix}/${file.relativePath}`;
         await this.storage.uploadFile({

@@ -5,3 +5,4 @@ export * from './services/course-access.service';
 export * from './use-cases/catalog.use-cases';
 export * from './use-cases/owner-learning.use-cases';
 export * from './use-cases/student-learning.use-cases';
+export * from './use-cases/learning-maintenance.use-case';

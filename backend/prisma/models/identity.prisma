@@ -37,6 +37,7 @@ model User {
   lessonProgress     LessonProgress[]
   initiatedVideoUploads VideoUpload[]
   initiatedLessonResources LessonResource[]
+  playbackSessions  PlaybackSession[]
 
   @@index([status, createdAt])
   @@map("users")
@@ -104,6 +105,7 @@ model Device {
   user             User            @relation(fields: [userId], references: [id], onDelete: Restrict)
   sessions         AuthSession[]
   securityEvents   SecurityEvent[]
+  playbackSessions PlaybackSession[]
 
   @@unique([userId, clientDeviceUuid])
   @@index([userId, revokedAt])
@@ -123,6 +125,7 @@ model AuthSession {
   user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
   device        Device         @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   refreshTokens RefreshToken[]
+  playbackSessions PlaybackSession[]
 
   @@index([userId, revokedAt])
   @@index([deviceId, revokedAt])

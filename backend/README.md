@@ -1,6 +1,6 @@
 # LMS backend
 
-Production-oriented backend through Phase 4 for the single-owner LMS. It is a strict-TypeScript NestJS modular monolith with separate HTTP API and BullMQ video-worker processes.
+Production-oriented backend through Phase 7 for the single-owner LMS. It is a strict-TypeScript NestJS modular monolith with separate HTTP API and BullMQ video-worker processes.
 
 The current language and phase decision is recorded in [ADR-0001](../Documentation/Architecture/ADR-0001-typescript-phase-zero-foundation.md). It amends, but does not silently rewrite, the original [V1 implementation plan](../Documentation/LMS_V1_JavaScript_Implementation_Plan.md).
 
@@ -70,7 +70,10 @@ Copy-Item .env.example .env
 ```bash
 # POSIX shell
 cp .env.example .env
+npm run media:keys:generate
 ```
+
+Copy the generated private key into `backend/.env` and the matching public key into the media Worker's secret/environment. The command only prints a fresh pair; it does not write secret files.
 
 The example values bind PostgreSQL, Redis, and MinIO only to loopback and match the local Compose services. Production uses the same S3-compatible port with a private Cloudflare R2 endpoint. Never commit `.env`.
 
@@ -107,11 +110,13 @@ Stop local infrastructure with `npm run infra:down`. Named Docker volumes preser
 
 With the default `.env`:
 
-| Endpoint                                      | Purpose                                                                                            |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `http://localhost:3000/api/v1/health`         | Dependency-aware PostgreSQL and Redis readiness check; returns `503` if either bounded check fails |
-| `http://localhost:3000/api/docs`              | Swagger UI when `API_DOCS_ENABLED=true`                                                            |
-| `http://localhost:3000/api/docs/openapi.json` | Generated development OpenAPI document when docs are enabled                                       |
+| Endpoint                                      | Purpose                                                                        |
+| --------------------------------------------- | ------------------------------------------------------------------------------ |
+| `http://localhost:3000/api/v1/health`         | Backward-compatible dependency readiness alias                                 |
+| `http://localhost:3000/api/v1/health/live`    | Dependency-free API process liveness                                           |
+| `http://localhost:3000/api/v1/health/ready`   | Bounded PostgreSQL, Redis, and video-queue readiness; returns `503` on failure |
+| `http://localhost:3000/api/docs`              | Swagger UI when `API_DOCS_ENABLED=true`                                        |
+| `http://localhost:3000/api/docs/openapi.json` | Generated development OpenAPI document when docs are enabled                   |
 
 The Swagger document is a development view of implemented endpoints. It does not replace the reviewed, source-controlled V1 contract that remains to be frozen.
 
@@ -134,34 +139,41 @@ Startup validation fails fast when required configuration is missing or invalid.
 
 ## Commands
 
-| Command                                   | Purpose                                                 |
-| ----------------------------------------- | ------------------------------------------------------- |
-| `npm run start:api:dev`                   | Run the API in watch mode                               |
-| `npm run start:worker:dev`                | Run the background worker in watch mode                 |
-| `npm run build`                           | Generate Prisma Client and build both applications      |
-| `npm run build:api`                       | Build only the API                                      |
-| `npm run build:worker`                    | Build only the worker                                   |
-| `npm run start:prod:api`                  | Run the compiled API process                            |
-| `npm run start:prod:worker`               | Run the compiled worker process                         |
-| `npm run typecheck`                       | Generate Prisma Client and run strict TypeScript checks |
-| `npm run lint`                            | Run non-mutating ESLint checks                          |
-| `npm run lint:fix`                        | Apply safe ESLint fixes                                 |
-| `npm run format:check`                    | Check formatting without changing files                 |
-| `npm run format`                          | Apply Prettier formatting                               |
-| `npm test`                                | Run unit tests                                          |
-| `npm run test:e2e`                        | Run API end-to-end tests                                |
-| `npm run contracts:lint`                  | Validate canonical OpenAPI and DBML contracts           |
-| `npm run test:cov`                        | Run tests with coverage                                 |
-| `npm run prisma:generate`                 | Generate the Prisma Client                              |
-| `npm run prisma:validate`                 | Validate Prisma configuration and schema                |
-| `npm run db:migrate:dev -- --name <name>` | Create/apply a local development migration              |
-| `npm run db:migrate:deploy`               | Apply checked-in migrations without development prompts |
-| `npm run db:seed`                         | Seed roles and the permission catalogue                 |
-| `npm run db:create-owner`                 | Create the sole owner from protected environment input  |
-| `npm run db:studio`                       | Open Prisma Studio                                      |
-| `npm run infra:up`                        | Start PostgreSQL, Redis, and private object storage     |
-| `npm run infra:logs`                      | Follow local infrastructure logs                        |
-| `npm run infra:down`                      | Stop local infrastructure without deleting volumes      |
+| Command                                   | Purpose                                                  |
+| ----------------------------------------- | -------------------------------------------------------- |
+| `npm run start:api:dev`                   | Run the API in watch mode                                |
+| `npm run start:worker:dev`                | Run the background worker in watch mode                  |
+| `npm run build`                           | Generate Prisma Client and build both applications       |
+| `npm run build:api`                       | Build only the API                                       |
+| `npm run build:worker`                    | Build only the worker                                    |
+| `npm run start:prod:api`                  | Run the compiled API process                             |
+| `npm run start:prod:worker`               | Run the compiled worker process                          |
+| `npm run typecheck`                       | Generate Prisma Client and run strict TypeScript checks  |
+| `npm run lint`                            | Run non-mutating ESLint checks                           |
+| `npm run lint:fix`                        | Apply safe ESLint fixes                                  |
+| `npm run format:check`                    | Check formatting without changing files                  |
+| `npm run format`                          | Apply Prettier formatting                                |
+| `npm test`                                | Run unit tests                                           |
+| `npm run test:e2e`                        | Run API end-to-end tests                                 |
+| `npm run contracts:lint`                  | Validate canonical OpenAPI and DBML contracts            |
+| `npm run test:cov`                        | Run tests with coverage                                  |
+| `npm run prisma:generate`                 | Generate the Prisma Client                               |
+| `npm run prisma:validate`                 | Validate Prisma configuration and schema                 |
+| `npm run db:migrate:dev -- --name <name>` | Create/apply a local development migration               |
+| `npm run db:migrate:deploy`               | Apply checked-in migrations without development prompts  |
+| `npm run db:seed`                         | Seed roles and the permission catalogue                  |
+| `npm run db:create-owner`                 | Create the sole owner from protected environment input   |
+| `npm run db:studio`                       | Open Prisma Studio                                       |
+| `npm run accept:phase6`                   | Run and clean the live Phase 6 operational acceptance    |
+| `npm run accept:phase7:security`          | Run and clean the live security and load acceptance      |
+| `npm run test:load`                       | Run the Phase 7 load/security acceptance gate            |
+| `npm run backup:create`                   | Create, encrypt, upload, and retain a PostgreSQL backup  |
+| `npm run backup:restore`                  | Restore an encrypted backup to an explicitly safe target |
+| `npm run backup:verify`                   | Prove restore into a disposable database                 |
+| `npm run security:secrets`                | Scan tracked and non-ignored source files for secrets    |
+| `npm run infra:up`                        | Start PostgreSQL, Redis, and private object storage      |
+| `npm run infra:logs`                      | Follow local infrastructure logs                         |
+| `npm run infra:down`                      | Stop local infrastructure without deleting volumes       |
 
 Before handing off a change, run:
 
@@ -173,6 +185,8 @@ npm run typecheck
 npm test
 npm run test:e2e
 npm run build
+npm run security:secrets
+npm run test:load
 ```
 
 ## Production-shaped startup
@@ -187,20 +201,23 @@ npm run build
 npm run start:prod:api
 ```
 
-Run `npm run start:prod:worker` in a second service/process with the same validated infrastructure configuration. Production deployment, TLS, Nginx, secrets management, backups, and monitoring are later release-readiness work.
+Run `npm run start:prod:worker` in a second service/process with the same validated infrastructure configuration. For the hardened Compose topology, Nginx ingress, Cloudflare/TLS policy, backup schedule, restore drill, log retention, alerts, and secret rotation, follow the [production runbook](../docs/production-runbook.md) and [deployment guide](../deploy/README.md).
 
 ## Current implementation boundaries
 
-Backend Phases 0 through 4 are implemented: platform infrastructure, identity/RBAC, learning and progress, private direct/multipart uploads and resources, plus asynchronous FFprobe/FFmpeg H.264/AAC adaptive-HLS processing. The worker selects only non-upscaled 360p/480p/720p/1080p renditions, generates a master playlist and thumbnail, verifies uploaded assets, persists attempts and variants, cleans temporary workspaces, exposes owner status/retry operations, and activates ready lesson videos atomically.
+Backend Phases 0 through 7 are implemented: platform infrastructure, identity/RBAC, learning and progress, private direct/multipart uploads and resources, asynchronous FFprobe/FFmpeg H.264/AAC adaptive-HLS processing, secure playback, student/owner operations, and production hardening. Playback uses permanent PostgreSQL sessions, a TTL-backed atomic Redis single-stream lock, replacement semantics, 30-second heartbeats, 90-second ES256 media leases, an HttpOnly `/media` cookie, and stale-session cleanup. The TypeScript Cloudflare Worker in `../media-worker` verifies each lease and serves only allowlisted HLS paths through a private R2 binding.
+
+Phase 7 adds split liveness/readiness, queue and FFmpeg monitoring, encrypted off-host PostgreSQL backups with retention and disposable restore verification, hardened non-root production images, Nginx/Cloudflare deployment guidance, strict production environment validation, secret scanning, and repeatable security/load acceptance with automatic fixture cleanup.
 
 The following remain intentionally pending:
 
-- playback leases, HLS media delivery, Redis concurrent-stream enforcement, and the Cloudflare media gateway;
-- remaining owner operational/audit APIs, backups, monitoring, and cleanup operations;
-- complete security, load, restore, and release-readiness gates;
+- Phase 8 clean-start backend release acceptance;
+- Safari/native-HLS and browser-player acceptance, which requires the deferred frontend;
 - all frontend work.
 
 Local MinIO receives its browser CORS policy through `MINIO_API_CORS_ALLOW_ORIGIN`. Configure the equivalent private-bucket CORS policy explicitly when provisioning Cloudflare R2.
+
+The media gateway has an independent gate: copy `../media-worker/.dev.vars.example` to `.dev.vars`, replace the development public key, then run `npm ci && npm run check` in `media-worker`. Deploy it on the same origin with a `/media/*` route, bind `MEDIA_BUCKET` to the private R2 bucket, and add `MEDIA_LEASE_PUBLIC_KEY` with `wrangler secret put`. The corresponding private key must exist only in the API environment.
 
 ## Troubleshooting
 

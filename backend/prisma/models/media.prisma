@@ -49,6 +49,16 @@ enum ProcessingJobStatus {
   @@map("processing_job_status")
 }
 
+enum PlaybackSessionStatus {
+  ACTIVE
+  ENDED
+  EXPIRED
+  REVOKED
+  REPLACED
+
+  @@map("playback_session_status")
+}
+
 model Video {
   id                String               @id @default(uuid(7)) @db.Uuid
   lessonId          String               @map("lesson_id") @db.Uuid
@@ -69,10 +79,56 @@ model Video {
   variants          VideoVariant[]
   uploads           VideoUpload[]
   processingJobs    VideoProcessingJob[]
+  playbackSessions  PlaybackSession[]
 
   @@index([lessonId, status, createdAt])
   @@index([status, createdAt])
   @@map("videos")
+}
+
+model PlaybackSession {
+  id                  String                @id @default(uuid(7)) @db.Uuid
+  userId              String                @map("user_id") @db.Uuid
+  lessonId            String                @map("lesson_id") @db.Uuid
+  videoId             String                @map("video_id") @db.Uuid
+  deviceId            String                @map("device_id") @db.Uuid
+  authSessionId       String                @map("auth_session_id") @db.Uuid
+  status              PlaybackSessionStatus @default(ACTIVE)
+  sessionCode         String                @unique @map("session_code")
+  startedAt           DateTime              @default(now()) @map("started_at") @db.Timestamptz(6)
+  lastHeartbeatAt     DateTime              @default(now()) @map("last_heartbeat_at") @db.Timestamptz(6)
+  endedAt             DateTime?             @map("ended_at") @db.Timestamptz(6)
+  lastPositionSeconds Int                   @default(0) @map("last_position_seconds")
+  ipAddress           String?               @map("ip_address") @db.Inet
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  lesson              Lesson                @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+  video               Video                 @relation(fields: [videoId], references: [id], onDelete: Restrict)
+  device              Device                @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  authSession         AuthSession           @relation(fields: [authSessionId], references: [id], onDelete: Restrict)
+  events              PlaybackEvent[]
+
+  @@index([userId, status, lastHeartbeatAt])
+  @@index([deviceId, status])
+  @@index([authSessionId, status])
+  @@index([videoId, createdAt])
+  @@index([lessonId])
+  @@map("playback_sessions")
+}
+
+model PlaybackEvent {
+  id                String          @id @default(uuid(7)) @db.Uuid
+  playbackSessionId String          @map("playback_session_id") @db.Uuid
+  eventType         String          @map("event_type")
+  positionSeconds   Int?            @map("position_seconds")
+  metadata          Json?
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  playbackSession   PlaybackSession @relation(fields: [playbackSessionId], references: [id], onDelete: Restrict)
+
+  @@index([playbackSessionId, createdAt])
+  @@index([eventType, createdAt])
+  @@map("playback_events")
 }
 
 model VideoAsset {

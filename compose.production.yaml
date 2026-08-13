@@ -1,0 +1,143 @@
+name: lms-production
+
+x-app-environment: &app-environment
+  NODE_ENV: production
+  API_PORT: 3000
+  APP_URL: ${APP_URL:?APP_URL is required}
+  CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  API_DOCS_ENABLED: "false"
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+  DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+  REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+  VIDEO_QUEUE_PREFIX: ${VIDEO_QUEUE_PREFIX:-lms}
+  JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+  JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+  REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:?REFRESH_TOKEN_SECRET is required}
+  REFRESH_TOKEN_TTL_SECONDS: ${REFRESH_TOKEN_TTL_SECONDS:-2592000}
+  MAX_REGISTERED_DEVICES: ${MAX_REGISTERED_DEVICES:-5}
+  PASSWORD_RESET_TTL_SECONDS: ${PASSWORD_RESET_TTL_SECONDS:-3600}
+  SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_SECURE: ${SMTP_SECURE:-true}
+  SMTP_USER: ${SMTP_USER:?SMTP_USER is required}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:?SMTP_PASSWORD is required}
+  SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is required}
+  OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:?OBJECT_STORAGE_ENDPOINT is required}
+  OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-auto}
+  OBJECT_STORAGE_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:?OBJECT_STORAGE_ACCESS_KEY_ID is required}
+  OBJECT_STORAGE_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:?OBJECT_STORAGE_SECRET_ACCESS_KEY is required}
+  OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:?OBJECT_STORAGE_BUCKET is required}
+  OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-false}
+  OBJECT_STORAGE_UPLOAD_TTL_SECONDS: ${OBJECT_STORAGE_UPLOAD_TTL_SECONDS:-900}
+  MAX_VIDEO_UPLOAD_BYTES: ${MAX_VIDEO_UPLOAD_BYTES:-10737418240}
+  FFMPEG_PATH: /usr/bin/ffmpeg
+  FFPROBE_PATH: /usr/bin/ffprobe
+  MEDIA_LEASE_PRIVATE_KEY: ${MEDIA_LEASE_PRIVATE_KEY:?MEDIA_LEASE_PRIVATE_KEY is required}
+  MEDIA_LEASE_TTL_SECONDS: ${MEDIA_LEASE_TTL_SECONDS:-90}
+  PLAYBACK_HEARTBEAT_INTERVAL_SECONDS: ${PLAYBACK_HEARTBEAT_INTERVAL_SECONDS:-30}
+  PLAYBACK_STALE_AFTER_SECONDS: ${PLAYBACK_STALE_AFTER_SECONDS:-120}
+  PLAYBACK_REDIS_PREFIX: ${PLAYBACK_REDIS_PREFIX:-lms:playback}
+
+x-logging: &default-logging
+  driver: local
+  options:
+    max-size: 20m
+    max-file: "10"
+
+services:
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: maintenance
+    environment: *app-environment
+    command: ["npm", "run", "db:migrate:deploy"]
+    restart: "no"
+    logging: *default-logging
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: runtime
+    environment: *app-environment
+    command: ["node", "dist/apps/api/main.js"]
+    expose: ["3000"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/v1/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    stop_grace_period: 30s
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    logging: *default-logging
+
+  video-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: runtime
+    environment: *app-environment
+    command: ["node", "dist/apps/video-worker/main.js"]
+    restart: unless-stopped
+    stop_grace_period: 90s
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=4g"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    logging: *default-logging
+
+  nginx:
+    image: nginx:1.29.1-alpine
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${ORIGIN_PORT:-8080}:8080"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+      - /var/cache/nginx:rw,noexec,nosuid,size=32m
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    logging: *default-logging
+
+  backup:
+    profiles: ["maintenance"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: maintenance
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:?BACKUP_S3_ENDPOINT is required}
+      BACKUP_S3_REGION: ${BACKUP_S3_REGION:-auto}
+      BACKUP_S3_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID:?BACKUP_S3_ACCESS_KEY_ID is required}
+      BACKUP_S3_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY:?BACKUP_S3_SECRET_ACCESS_KEY is required}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:?BACKUP_S3_BUCKET is required}
+      BACKUP_PREFIX: ${BACKUP_PREFIX:-postgres}
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:?BACKUP_ENCRYPTION_KEY is required}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_MIN_COPIES: ${BACKUP_MIN_COPIES:-7}
+    command: ["npm", "run", "backup:create"]
+    restart: "no"
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=2g"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    logging: *default-logging

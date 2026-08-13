@@ -1,7 +1,11 @@
 export * from './ports/media-repository.port';
 export * from './ports/object-storage.port';
 export * from './ports/video-processing.port';
+export * from './ports/playback-repository.port';
+export * from './ports/playback-lock.port';
+export * from './ports/media-lease.port';
 export * from './use-cases/video-upload.use-cases';
 export * from './use-cases/video-processing.use-cases';
 export * from './use-cases/lesson-resource.use-cases';
+export * from './use-cases/playback.use-cases';
 export { InvalidVideoSourceError } from '../domain';

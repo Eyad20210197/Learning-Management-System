@@ -63,6 +63,15 @@ export class ResourceNotFoundError extends DomainError {
   }
 }
 
+export class InvalidProfileUpdateError extends DomainError {
+  constructor() {
+    super(
+      'INVALID_PROFILE_UPDATE',
+      'At least one profile field must be provided.',
+    );
+  }
+}
+
 export class PasswordResetTokenInvalidError extends DomainError {
   constructor() {
     super(

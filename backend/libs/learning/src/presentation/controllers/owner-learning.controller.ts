@@ -135,6 +135,7 @@ export class OwnerLearningController {
     return LearningPresenter.course(course);
   }
   @Post('courses/:courseId/publish')
+  @HttpCode(200)
   @RequirePermissions('course.publish')
   async publish(
     @Req() req: OwnerRequest,
@@ -157,6 +158,7 @@ export class OwnerLearningController {
     ).value;
   }
   @Post('courses/:courseId/archive')
+  @HttpCode(200)
   @RequirePermissions('course.archive')
   async archive(
     @Req() req: OwnerRequest,

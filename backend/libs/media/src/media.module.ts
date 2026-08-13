@@ -1,14 +1,22 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 import { IdentityModule } from '@lms/identity';
+import { LearningModule } from '@lms/learning';
 import { OperationsModule } from '@lms/operations';
-import { DatabaseModule, VideoQueueModule } from '@lms/platform';
+import {
+  DatabaseModule,
+  PlatformSchedulingModule,
+  RedisModule,
+  VideoQueueModule,
+} from '@lms/platform';
 import * as UseCases from './application';
 import {
   MEDIA_PROBE,
+  MEDIA_LEASE,
   MEDIA_REPOSITORY,
   OBJECT_STORAGE,
   TEMPORARY_WORKSPACE,
+  PLAYBACK_LOCK,
+  PLAYBACK_REPOSITORY,
   VIDEO_TRANSCODER,
 } from './application';
 import {
@@ -16,21 +24,35 @@ import {
   FfprobeAdapter,
   MediaCommandRunner,
   PrismaMediaRepository,
+  PrismaPlaybackRepository,
+  RedisPlaybackLockAdapter,
+  Es256MediaLeaseAdapter,
   S3ObjectStorageAdapter,
   TemporaryWorkspaceAdapter,
 } from './infrastructure';
 import { UploadCleanupService } from './infrastructure/scheduling/upload-cleanup.service';
-import { LessonResourceController, OwnerVideoController } from './presentation';
+import { PlaybackCleanupService } from './infrastructure/scheduling/playback-cleanup.service';
+import {
+  LessonResourceController,
+  OwnerVideoController,
+  PlaybackController,
+} from './presentation';
 
 @Module({
   imports: [
     DatabaseModule,
     IdentityModule,
+    LearningModule,
     OperationsModule,
     VideoQueueModule,
-    ScheduleModule.forRoot(),
+    RedisModule,
+    PlatformSchedulingModule,
   ],
-  controllers: [OwnerVideoController, LessonResourceController],
+  controllers: [
+    OwnerVideoController,
+    LessonResourceController,
+    PlaybackController,
+  ],
   providers: [
     UseCases.InitiateVideoUploadUseCase,
     UseCases.CompleteVideoUploadUseCase,
@@ -46,9 +68,18 @@ import { LessonResourceController, OwnerVideoController } from './presentation';
     UseCases.CompleteLessonResourceUseCase,
     UseCases.GetLessonResourceDownloadUseCase,
     UseCases.ExpireLessonResourcesUseCase,
+    UseCases.CreatePlaybackSessionUseCase,
+    UseCases.HeartbeatPlaybackSessionUseCase,
+    UseCases.EndPlaybackSessionUseCase,
+    UseCases.IssueMediaLeaseUseCase,
+    UseCases.ExpireStalePlaybackSessionsUseCase,
     UploadCleanupService,
+    PlaybackCleanupService,
     MediaCommandRunner,
     { provide: MEDIA_REPOSITORY, useClass: PrismaMediaRepository },
+    { provide: PLAYBACK_REPOSITORY, useClass: PrismaPlaybackRepository },
+    { provide: PLAYBACK_LOCK, useClass: RedisPlaybackLockAdapter },
+    { provide: MEDIA_LEASE, useClass: Es256MediaLeaseAdapter },
     { provide: OBJECT_STORAGE, useClass: S3ObjectStorageAdapter },
     { provide: TEMPORARY_WORKSPACE, useClass: TemporaryWorkspaceAdapter },
     { provide: MEDIA_PROBE, useClass: FfprobeAdapter },

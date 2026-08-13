@@ -1,4 +1,4 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import { UnrecoverableError } from 'bullmq';
@@ -59,5 +59,22 @@ export class VideoProcessingProcessor extends WorkerHost {
       }
       throw error;
     }
+  }
+
+  @OnWorkerEvent('stalled')
+  onStalled(jobId: string): void {
+    this.logger.warn({ message: 'Video processing job stalled', jobId });
+  }
+
+  @OnWorkerEvent('failed')
+  onFailed(job: Job<VideoProcessingJobData> | undefined, error: Error): void {
+    this.logger.error({
+      message: 'Video processing job exhausted an attempt',
+      queueJobId: job?.id,
+      videoId: job?.data.videoId,
+      processingJobId: job?.data.processingJobId,
+      attemptsMade: job?.attemptsMade,
+      error: error.message,
+    });
   }
 }

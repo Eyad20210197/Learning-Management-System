@@ -146,6 +146,11 @@ export class GlobalExceptionFilter extends BaseExceptionFilter {
       MEDIA_RESOURCE_NOT_FOUND: HttpStatus.NOT_FOUND,
       INVALID_UPLOAD: HttpStatus.UNPROCESSABLE_ENTITY,
       UPLOAD_STATE_CONFLICT: HttpStatus.CONFLICT,
+      PLAYBACK_UNAVAILABLE: HttpStatus.CONFLICT,
+      PLAYBACK_SESSION_NOT_FOUND: HttpStatus.NOT_FOUND,
+      PLAYBACK_REPLACED: HttpStatus.CONFLICT,
+      PLAYBACK_REVOKED: HttpStatus.FORBIDDEN,
+      PLAYBACK_ENDED: HttpStatus.CONFLICT,
     };
 
     return statuses[code] ?? HttpStatus.BAD_REQUEST;

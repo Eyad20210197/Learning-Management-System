@@ -98,6 +98,8 @@ ACTIVE --------------------------------> REPLACED
 - Creation locks the user's concurrency key, ends/replaces any active session, creates the new session, and then publishes Redis active state.
 - Redis TTL is fast authorization state; PostgreSQL retains the permanent session record.
 - Heartbeats never reactivate a terminal session.
+- The API signs a 90-second ES256 media lease only while Redis still names the PostgreSQL `ACTIVE` session as the user's current stream.
+- `/media/hls/<video-id>/<relative-path>` maps only to `processed/<video-id>/hls/<relative-path>` after strict extension and traversal checks; original sources are unreachable.
 
 ## Course
 

@@ -5,6 +5,7 @@
 **/dist/
 **/coverage/
 **/.cache/
+**/.wrangler/
 **/.eslintcache
 **/*.tsbuildinfo
 
@@ -15,6 +16,7 @@
 **/.env
 **/.env.*
 !**/.env.example
+!**/.dev.vars.example
 /backend/node_modules/
 /backend/.env.example
 
@@ -44,4 +46,3 @@ pnpm-debug.log*
 .vscode/
 .DS_Store
 Thumbs.db
-

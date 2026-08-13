@@ -4,6 +4,7 @@ import { DatabaseModule } from './database';
 import { ObservabilityModule } from './observability';
 import { VideoQueueModule } from './queue';
 import { RedisModule } from './redis';
+import { PlatformSchedulingModule } from './scheduling';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { RedisModule } from './redis';
     DatabaseModule,
     RedisModule,
     VideoQueueModule,
+    PlatformSchedulingModule,
   ],
   exports: [
     PlatformConfigModule,
@@ -19,6 +21,7 @@ import { RedisModule } from './redis';
     DatabaseModule,
     RedisModule,
     VideoQueueModule,
+    PlatformSchedulingModule,
   ],
 })
 export class PlatformModule {}

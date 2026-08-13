@@ -386,6 +386,7 @@ Table playback_sessions {
   lesson_id uuid [not null, ref: > lessons.id]
   video_id uuid [not null, ref: > videos.id]
   device_id uuid [not null, ref: > devices.id]
+  auth_session_id uuid [not null, ref: > auth_sessions.id]
   status playback_status [not null]
   session_code text [not null, unique]
   started_at timestamptz [not null]
@@ -399,6 +400,7 @@ Table playback_sessions {
   indexes {
     (user_id, status, last_heartbeat_at)
     (device_id, status)
+    (auth_session_id, status)
     (video_id, created_at)
     (lesson_id)
   }

@@ -10,3 +10,4 @@ export * from './use-cases/password.use-cases';
 export * from './use-cases/refresh-session.use-case';
 export * from './use-cases/register-student.use-case';
 export * from './use-cases/session-management.use-cases';
+export * from './use-cases/update-profile.use-case';

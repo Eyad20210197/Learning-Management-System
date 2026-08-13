@@ -60,6 +60,39 @@ export class PrismaUserRepository implements UserRepositoryPort {
     }
   }
 
+  async updateProfile(
+    userId: string,
+    input: { firstName?: string; lastName?: string },
+  ): Promise<User | null> {
+    const exists = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (exists === null) return null;
+    const record = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(input.firstName === undefined
+          ? {}
+          : { firstName: input.firstName.trim() }),
+        ...(input.lastName === undefined
+          ? {}
+          : { lastName: input.lastName.trim() }),
+      },
+      include: { roles: { include: { role: true } } },
+    });
+    return new User({
+      id: record.id,
+      email: Email.create(record.email),
+      firstName: record.firstName,
+      lastName: record.lastName,
+      status: record.status,
+      roles: record.roles.map(({ role }) => role.name),
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+    });
+  }
+
   private isUniqueConstraintError(error: unknown): boolean {
     return (
       typeof error === 'object' &&

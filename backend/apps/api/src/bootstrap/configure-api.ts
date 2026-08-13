@@ -8,6 +8,13 @@ export function configureApi(
   app: INestApplication,
   config: ConfigService,
 ): void {
+  const express = app.getHttpAdapter().getInstance() as {
+    set(name: string, value: unknown): void;
+  };
+  // Nginx is the sole public ingress in production. Trusting exactly one hop
+  // preserves the original protocol/IP without accepting arbitrary forwarded
+  // headers directly from clients.
+  express.set('trust proxy', 1);
   app.setGlobalPrefix('api');
   app.enableVersioning({
     type: VersioningType.URI,

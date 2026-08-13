@@ -33,6 +33,11 @@ export interface EnvironmentVariables extends Record<string, unknown> {
   MAX_VIDEO_UPLOAD_BYTES: number;
   FFMPEG_PATH?: string;
   FFPROBE_PATH?: string;
+  MEDIA_LEASE_PRIVATE_KEY: string;
+  MEDIA_LEASE_TTL_SECONDS: number;
+  PLAYBACK_HEARTBEAT_INTERVAL_SECONDS: number;
+  PLAYBACK_STALE_AFTER_SECONDS: number;
+  PLAYBACK_REDIS_PREFIX: string;
 }
 
 const commaSeparatedOrigins = (
@@ -86,6 +91,33 @@ const requireProductionEmail = (
   return required.every((entry) => entry !== undefined && entry !== '')
     ? value
     : helpers.error('smtp.production');
+};
+
+const requireProductionSecurity = (
+  value: EnvironmentVariables,
+  helpers: CustomHelpers,
+): EnvironmentVariables | ReturnType<CustomHelpers['error']> => {
+  if (value.NODE_ENV !== 'production') return value;
+
+  const appUrl = new URL(value.APP_URL);
+  const origins = value.CORS_ORIGINS.split(',').map(
+    (origin) => new URL(origin),
+  );
+  const forbiddenSecretFragment = /(?:replace|change|example|test|secret)/i;
+  const secrets = [
+    value.JWT_ACCESS_SECRET,
+    value.REFRESH_TOKEN_SECRET,
+    value.OBJECT_STORAGE_SECRET_ACCESS_KEY,
+  ];
+
+  if (appUrl.protocol !== 'https:') return helpers.error('security.https');
+  if (origins.some((origin) => origin.protocol !== 'https:'))
+    return helpers.error('security.corsHttps');
+  if (value.JWT_ACCESS_SECRET === value.REFRESH_TOKEN_SECRET)
+    return helpers.error('security.uniqueSecrets');
+  if (secrets.some((secret) => forbiddenSecretFragment.test(secret)))
+    return helpers.error('security.placeholderSecret');
+  return value;
 };
 
 export const environmentSchema = Joi.object<EnvironmentVariables>({
@@ -160,11 +192,33 @@ export const environmentSchema = Joi.object<EnvironmentVariables>({
     .default(10_737_418_240),
   FFMPEG_PATH: Joi.string().allow('').optional(),
   FFPROBE_PATH: Joi.string().allow('').optional(),
+  MEDIA_LEASE_PRIVATE_KEY: Joi.string().base64().min(100).required(),
+  MEDIA_LEASE_TTL_SECONDS: Joi.number().integer().min(30).max(300).default(90),
+  PLAYBACK_HEARTBEAT_INTERVAL_SECONDS: Joi.number()
+    .integer()
+    .min(10)
+    .max(60)
+    .default(30),
+  PLAYBACK_STALE_AFTER_SECONDS: Joi.number()
+    .integer()
+    .min(60)
+    .max(600)
+    .default(120),
+  PLAYBACK_REDIS_PREFIX: Joi.string()
+    .pattern(/^[a-zA-Z0-9:_-]+$/)
+    .default('lms:playback'),
 })
   .custom(requireProductionEmail, 'production SMTP validation')
+  .custom(requireProductionSecurity, 'production security validation')
   .messages({
     'smtp.production':
       'Production requires SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and SMTP_FROM',
+    'security.https': 'Production APP_URL must use HTTPS',
+    'security.corsHttps': 'Production CORS_ORIGINS must use HTTPS',
+    'security.uniqueSecrets':
+      'Production JWT access and refresh secrets must be different',
+    'security.placeholderSecret':
+      'Production secrets must not contain placeholder values',
   });
 
 export const validateEnvironment = (

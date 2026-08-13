@@ -1,8 +1,8 @@
-export async function withDependencyTimeout(
-  operation: Promise<void>,
+export async function withDependencyTimeout<T>(
+  operation: Promise<T>,
   dependency: string,
   timeoutMs = 2_000,
-): Promise<void> {
+): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
@@ -12,7 +12,7 @@ export async function withDependencyTimeout(
   });
 
   try {
-    await Promise.race([operation, timeout]);
+    return await Promise.race([operation, timeout]);
   } finally {
     if (timer !== undefined) {
       clearTimeout(timer);

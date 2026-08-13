@@ -1,5 +1,17 @@
 import { DomainError } from '@lms/shared-kernel';
 
+export class OperationsResourceNotFoundError extends DomainError {
+  constructor() {
+    super('RESOURCE_NOT_FOUND', 'The requested resource was not found.');
+  }
+}
+
+export class InvalidCursorError extends DomainError {
+  constructor() {
+    super('INVALID_CURSOR', 'The pagination cursor is invalid.');
+  }
+}
+
 export class IdempotencyKeyRequiredError extends DomainError {
   constructor() {
     super(

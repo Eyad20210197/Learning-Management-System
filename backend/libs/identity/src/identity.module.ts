@@ -17,6 +17,7 @@ import {
   ResetPasswordUseCase,
   RevokeDeviceUseCase,
   RegisterStudentUseCase,
+  UpdateProfileUseCase,
   TOKEN_SERVICE,
   PASSWORD_RESET_NOTIFIER,
   PASSWORD_RESET_REPOSITORY,
@@ -48,6 +49,7 @@ import {
   controllers: [AuthController, AccountController],
   providers: [
     RegisterStudentUseCase,
+    UpdateProfileUseCase,
     LoginUseCase,
     RefreshSessionUseCase,
     AuthenticateAccessUseCase,
