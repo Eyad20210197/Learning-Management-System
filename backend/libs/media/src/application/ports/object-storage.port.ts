@@ -37,6 +37,7 @@ export interface ObjectStoragePort {
   }): Promise<void>;
   head(key: string): Promise<StoredObjectMetadata | null>;
   delete(key: string): Promise<void>;
+  deletePrefix?(prefix: string): Promise<void>;
 }
 
 export const OBJECT_STORAGE = Symbol('media.object-storage');

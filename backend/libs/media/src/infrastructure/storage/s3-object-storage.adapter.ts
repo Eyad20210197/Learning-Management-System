@@ -4,8 +4,10 @@ import {
   CreateBucketCommand,
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   GetObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -208,5 +210,30 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort, OnModuleInit {
     await this.client.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
     );
+  }
+
+  async deletePrefix(prefix: string): Promise<void> {
+    let continuationToken: string | undefined;
+    do {
+      const listed = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        }),
+      );
+      const objects = (listed.Contents ?? [])
+        .map(({ Key }) => Key)
+        .filter((key): key is string => key !== undefined);
+      if (objects.length > 0) {
+        await this.client.send(
+          new DeleteObjectsCommand({
+            Bucket: this.bucket,
+            Delete: { Objects: objects.map((Key) => ({ Key })), Quiet: true },
+          }),
+        );
+      }
+      continuationToken = listed.NextContinuationToken;
+    } while (continuationToken !== undefined);
   }
 }

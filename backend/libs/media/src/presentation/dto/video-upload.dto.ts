@@ -15,15 +15,15 @@ import {
 import { Type } from 'class-transformer';
 
 export class VideoUploadDto {
-  @IsString() @MinLength(1) @MaxLength(255) filename!: string;
+  @IsString() @MinLength(1) @MaxLength(100) filename!: string;
   @IsIn(['video/mp4', 'video/quicktime', 'video/x-matroska'])
   mimeType!: string;
   @IsInt() @Min(1) sizeBytes!: number;
 }
 
 export class LessonResourceUploadDto {
-  @IsString() @MinLength(1) @MaxLength(200) title!: string;
-  @IsString() @MinLength(1) @MaxLength(255) filename!: string;
+  @IsString() @MinLength(1) @MaxLength(100) title!: string;
+  @IsString() @MinLength(1) @MaxLength(100) filename!: string;
   @IsIn([
     'application/pdf',
     'text/plain',

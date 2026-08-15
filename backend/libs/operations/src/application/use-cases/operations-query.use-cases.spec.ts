@@ -38,6 +38,7 @@ describe('operations query use cases', () => {
       activeEnrollments: 0,
       publishedCourses: 0,
       videosProcessing: 0,
+      videosProcessed: 0,
       videosFailed: 0,
       activePlaybackSessions: 0,
       unresolvedSecurityEvents: 0,

@@ -258,6 +258,7 @@ export class PrismaOperationsRepository implements OperationsRepositoryPort {
       activeEnrollments,
       publishedCourses,
       videosProcessing,
+      videosProcessed,
       videosFailed,
       activePlaybackSessions,
       unresolvedSecurityEvents,
@@ -276,6 +277,7 @@ export class PrismaOperationsRepository implements OperationsRepositoryPort {
       this.prisma.video.count({
         where: { status: { in: ['UPLOADED', 'QUEUED', 'PROCESSING'] } },
       }),
+      this.prisma.video.count({ where: { status: 'READY' } }),
       this.prisma.video.count({ where: { status: 'FAILED' } }),
       this.prisma.playbackSession.count({ where: { status: 'ACTIVE' } }),
       this.prisma.securityEvent.count({ where: { resolvedAt: null } }),
@@ -285,6 +287,7 @@ export class PrismaOperationsRepository implements OperationsRepositoryPort {
       activeEnrollments,
       publishedCourses,
       videosProcessing,
+      videosProcessed,
       videosFailed,
       activePlaybackSessions,
       unresolvedSecurityEvents,

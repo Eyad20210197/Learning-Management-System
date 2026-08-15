@@ -32,8 +32,10 @@ import {
 } from './infrastructure';
 import { UploadCleanupService } from './infrastructure/scheduling/upload-cleanup.service';
 import { PlaybackCleanupService } from './infrastructure/scheduling/playback-cleanup.service';
+import { PrismaContentDeletionService } from './infrastructure/deletion/prisma-content-deletion.service';
 import {
   LessonResourceController,
+  OwnerContentDeletionController,
   OwnerVideoController,
   PlaybackController,
 } from './presentation';
@@ -51,6 +53,7 @@ import {
   controllers: [
     OwnerVideoController,
     LessonResourceController,
+    OwnerContentDeletionController,
     PlaybackController,
   ],
   providers: [
@@ -75,6 +78,7 @@ import {
     UseCases.ExpireStalePlaybackSessionsUseCase,
     UploadCleanupService,
     PlaybackCleanupService,
+    PrismaContentDeletionService,
     MediaCommandRunner,
     { provide: MEDIA_REPOSITORY, useClass: PrismaMediaRepository },
     { provide: PLAYBACK_REPOSITORY, useClass: PrismaPlaybackRepository },

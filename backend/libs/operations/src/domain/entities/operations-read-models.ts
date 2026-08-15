@@ -128,6 +128,7 @@ export interface OperationsSummaryView {
   activeEnrollments: number;
   publishedCourses: number;
   videosProcessing: number;
+  videosProcessed: number;
   videosFailed: number;
   activePlaybackSessions: number;
   unresolvedSecurityEvents: number;

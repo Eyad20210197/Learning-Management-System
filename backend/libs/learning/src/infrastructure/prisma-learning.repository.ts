@@ -48,6 +48,15 @@ interface ResourceRecord {
   createdAt: Date;
 }
 
+interface ProgressRecord {
+  lessonId: string;
+  lastPositionSeconds: number;
+  maximumPositionSeconds: number;
+  watchedSeconds: number;
+  percentage: { toString(): string };
+  completedAt: Date | null;
+}
+
 @Injectable()
 export class PrismaLearningRepository implements LearningRepositoryPort {
   constructor(private readonly prisma: PrismaService) {}
@@ -350,9 +359,21 @@ export class PrismaLearningRepository implements LearningRepositoryPort {
           },
         },
       },
+      include: {
+        sections: {
+          include: {
+            lessons: {
+              include: { progress: { where: { userId }, take: 1 } },
+            },
+          },
+        },
+      },
       orderBy: [{ title: 'asc' }, { id: 'asc' }],
     });
-    return items.map((record) => this.toCourse(record));
+    return items.map((record) => ({
+      ...this.toCourse(record),
+      courseProgress: this.courseProgress(record.sections),
+    }));
   }
   async getAuthorizedCourse(
     userId: string,
@@ -365,7 +386,20 @@ export class PrismaLearningRepository implements LearningRepositoryPort {
         status: 'PUBLISHED',
         enrollments: { some: this.activeEnrollment(userId, now) },
       },
-      include: courseInclude,
+      include: {
+        sections: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            lessons: {
+              orderBy: { sortOrder: 'asc' },
+              include: {
+                resources: { orderBy: { createdAt: 'asc' } },
+                progress: { where: { userId }, take: 1 },
+              },
+            },
+          },
+        },
+      },
     });
     return record && this.courseWithCurriculum(record);
   }
@@ -387,6 +421,7 @@ export class PrismaLearningRepository implements LearningRepositoryPort {
       include: {
         progress: { where: { userId }, take: 1 },
         resources: { orderBy: { createdAt: 'asc' } },
+        section: { select: { courseId: true } },
       },
     });
     return (
@@ -395,6 +430,7 @@ export class PrismaLearningRepository implements LearningRepositoryPort {
         record,
         record.progress[0] ? this.toProgress(record.progress[0]) : null,
         record.resources,
+        record.section.courseId,
       )
     );
   }
@@ -576,8 +612,10 @@ export class PrismaLearningRepository implements LearningRepositoryPort {
     record: LessonRecord,
     progress?: LessonProgressView | null,
     resources?: ResourceRecord[],
+    courseId?: string,
   ): LessonView => ({
     ...record,
+    ...(courseId ? { courseId } : {}),
     ...(progress !== undefined ? { progress } : {}),
     ...(resources !== undefined
       ? {
@@ -596,21 +634,54 @@ export class PrismaLearningRepository implements LearningRepositoryPort {
         title: string;
         description: string | null;
         sortOrder: number;
-        lessons: Array<LessonRecord & { resources: ResourceRecord[] }>;
+        lessons: Array<
+          LessonRecord & {
+            resources: ResourceRecord[];
+            progress?: ProgressRecord[];
+          }
+        >;
       }>;
     },
   ): CourseView {
-    return this.toCourse(
-      record,
-      record.sections.map((section) =>
-        this.toSection(
-          section,
-          section.lessons.map((lesson) =>
-            this.toLesson(lesson, undefined, lesson.resources),
+    return {
+      ...this.toCourse(
+        record,
+        record.sections.map((section) =>
+          this.toSection(
+            section,
+            section.lessons.map((lesson) =>
+              this.toLesson(
+                lesson,
+                lesson.progress
+                  ? lesson.progress[0]
+                    ? this.toProgress(lesson.progress[0])
+                    : null
+                  : undefined,
+                lesson.resources,
+              ),
+            ),
           ),
         ),
       ),
-    );
+      courseProgress: this.courseProgress(record.sections),
+    };
+  }
+
+  private courseProgress(
+    sections: Array<{ lessons: Array<{ progress?: ProgressRecord[] }> }>,
+  ): NonNullable<CourseView['courseProgress']> {
+    const lessons = sections.flatMap((section) => section.lessons);
+    const completedLessons = lessons.filter(
+      (lesson) => lesson.progress?.[0]?.completedAt != null,
+    ).length;
+    return {
+      completedLessons,
+      totalLessons: lessons.length,
+      percentage:
+        lessons.length === 0
+          ? 0
+          : Math.round((completedLessons / lessons.length) * 100),
+    };
   }
   private toEnrollment(record: {
     id: string;

@@ -4,6 +4,7 @@ export type LessonType = 'VIDEO' | 'TEXT';
 export interface LessonView {
   id: string;
   sectionId: string;
+  courseId?: string;
   title: string;
   description: string | null;
   type: LessonType;
@@ -42,6 +43,11 @@ export interface CourseView {
   createdAt: Date;
   updatedAt: Date;
   sections?: SectionView[];
+  courseProgress?: {
+    completedLessons: number;
+    totalLessons: number;
+    percentage: number;
+  };
 }
 
 export interface LessonProgressView {
