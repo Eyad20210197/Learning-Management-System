@@ -27,8 +27,8 @@ function LearningDashboard({
     queryFn: () => learningApi.myCourses(token),
   });
   return (
-    <section className="dashboard page-container">
-      <div className="dashboard-heading">
+    <section className="dashboard student-dashboard page-container">
+      <div className="dashboard-heading student-hero-panel">
         <p className="eyebrow">Your learning space</p>
         <h1>Welcome, {firstName}.</h1>
       </div>
@@ -51,7 +51,7 @@ function LearningDashboard({
         <div className="course-grid">
           {courses.data.items.map((course) => (
             <Link
-              className="course-card"
+              className="course-card student-course-card"
               key={course.id}
               to={`/learn/courses/${course.id}`}
             >

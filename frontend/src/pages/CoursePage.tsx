@@ -36,36 +36,38 @@ export function CoursePage() {
   const nextLesson =
     lessons.find((lesson) => !lesson.progress?.completedAt) ?? lessons[0];
   return (
-    <section className="course-page page-container">
-      <ParentPageLink label="Back to learning" to="/learn" />
-      <p className="eyebrow course-eyebrow">Course</p>
-      <h1>{course.data.title}</h1>
-      <p className="lede">{course.data.description}</p>
-      {course.data.courseProgress && (
-        <div
-          className="course-progress course-progress-detail"
-          aria-label={`${course.data.courseProgress.percentage}% complete`}
-        >
-          <div className="course-progress-copy">
-            <strong>{course.data.courseProgress.percentage}% complete</strong>
-            <span>
-              {course.data.courseProgress.completedLessons} of{" "}
-              {course.data.courseProgress.totalLessons} lessons finished
-            </span>
+    <section className="course-page student-course-page page-container">
+      <div className="student-hero-panel">
+        <ParentPageLink label="Back to learning" to="/learn" />
+        <p className="eyebrow course-eyebrow">Course</p>
+        <h1>{course.data.title}</h1>
+        <p className="lede">{course.data.description}</p>
+        {course.data.courseProgress && (
+          <div
+            className="course-progress course-progress-detail"
+            aria-label={`${course.data.courseProgress.percentage}% complete`}
+          >
+            <div className="course-progress-copy">
+              <strong>{course.data.courseProgress.percentage}% complete</strong>
+              <span>
+                {course.data.courseProgress.completedLessons} of{" "}
+                {course.data.courseProgress.totalLessons} lessons finished
+              </span>
+            </div>
+            <progress max="100" value={course.data.courseProgress.percentage} />
           </div>
-          <progress max="100" value={course.data.courseProgress.percentage} />
-        </div>
-      )}
-      {nextLesson && (
-        <Link
-          className="button button-primary course-start"
-          to={`/learn/lessons/${nextLesson.id}`}
-        >
-          {course.data.courseProgress?.completedLessons
-            ? "Continue learning"
-            : "Start course"}
-        </Link>
-      )}
+        )}
+        {nextLesson && (
+          <Link
+            className="button button-primary course-start"
+            to={`/learn/lessons/${nextLesson.id}`}
+          >
+            {course.data.courseProgress?.completedLessons
+              ? "Continue learning"
+              : "Start course"}
+          </Link>
+        )}
+      </div>
       <div className="lesson-list">
         {course.data.sections?.map((section, sectionIndex) => (
           <section className="student-section" key={section.id}>
@@ -83,7 +85,11 @@ export function CoursePage() {
             </div>
             {section.lessons.map((lesson, lessonIndex) => (
               <Link
-                className="lesson-row"
+                className={
+                  lesson.progress?.completedAt
+                    ? "lesson-row is-complete"
+                    : "lesson-row"
+                }
                 key={lesson.id}
                 to={`/learn/lessons/${lesson.id}`}
               >

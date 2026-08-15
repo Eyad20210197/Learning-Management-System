@@ -6,9 +6,18 @@
   --line: #dedfd9;
   --accent: #7452ff;
   --accent-dark: #5b38e6;
+  --accent-soft: #eee9ff;
+  --lime: #c8ff63;
+  --orange: #ee7b4d;
+  --green: #178f87;
+  --night: #090a0f;
+  --night-soft: #12131a;
   --focus: #b39cff;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --display: Inter, ui-sans-serif, system-ui, sans-serif;
   --radius-md: 16px;
+  --radius-sm: 10px;
   --radius-pill: 999px;
   --shadow-soft: 0 18px 50px rgb(31 40 37 / 8%);
+  --shadow-lift: 0 26px 60px rgb(17 17 24 / 10%);
 }

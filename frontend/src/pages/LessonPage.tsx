@@ -80,22 +80,24 @@ export function LessonPage() {
       </section>
     );
   return (
-    <section className="lesson-page page-container">
-      <ParentPageLink
-        label="Back to course"
-        to={
-          lesson.data.courseId
-            ? `/learn/courses/${lesson.data.courseId}`
-            : "/learn"
-        }
-      />
-      <p className="eyebrow course-eyebrow">
-        {lesson.data.type === "VIDEO" ? "Video lesson" : "Reading lesson"}
-      </p>
-      <h1>{lesson.data.title}</h1>
-      {lesson.data.description && (
-        <p className="lede">{lesson.data.description}</p>
-      )}
+    <section className="lesson-page student-lesson-page page-container">
+      <div className="student-hero-panel">
+        <ParentPageLink
+          label="Back to course"
+          to={
+            lesson.data.courseId
+              ? `/learn/courses/${lesson.data.courseId}`
+              : "/learn"
+          }
+        />
+        <p className="eyebrow course-eyebrow">
+          {lesson.data.type === "VIDEO" ? "Video lesson" : "Reading lesson"}
+        </p>
+        <h1>{lesson.data.title}</h1>
+        {lesson.data.description && (
+          <p className="lede">{lesson.data.description}</p>
+        )}
+      </div>
       {lesson.data.type === "VIDEO" && (
         <SecureVideoPlayer token={accessToken} lessonId={lessonId!} />
       )}
